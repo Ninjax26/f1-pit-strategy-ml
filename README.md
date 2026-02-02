@@ -61,6 +61,20 @@ python src/sim/strategy_sim.py --round 14 --driver VER --pit-loss auto
 python src/reports/case_study_max.py --round 14 --driver VER --model hgb
 ```
 
+## Results (2024 test rounds 17–24)
+- HGB MAE: **1.49s**, RMSE: **2.30s**
+- Ridge MAE: **3.74s**, RMSE: **4.91s**
+- Target: `LapTimeDelta` (lap time minus race median) for track normalization
+
+## Sample Plots
+![Predicted vs Actual (HGB)](figures/pred_vs_actual_hgb.png)
+![Residuals (HGB)](figures/residuals_hgb.png)
+![MAE by Round (HGB)](figures/mae_by_round_hgb.png)
+
+## Case Study (Max Verstappen, Round 14)
+- Report: `reports/case_study_max_round14.md`
+![Case Study Plot](figures/case_study_max_round14.png)
+
 ## Week Plan (1-week sprint)
 1. Data pull + cleaning for all 2024 races
 2. Feature engineering and baseline model
