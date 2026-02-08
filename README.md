@@ -1,5 +1,7 @@
 # F1 2024 Pit Strategy ML + Simulation
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-name.streamlit.app) *(Update with your Streamlit Cloud URL)*
+
 This project builds a lap-time prediction model from **F1 2024 main race data** and uses it to simulate pit strategies.
 
 ## Goals
@@ -15,6 +17,7 @@ This project builds a lap-time prediction model from **F1 2024 main race data** 
 - `reports/` : short summary write-up
 - `figures/` : plots
 - `src/` : data + model + simulation code
+- `app.py` : Streamlit web application
 
 ## Setup
 ```bash
@@ -23,7 +26,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Quickstart (2024 main races)
+## Quickstart
+
+### Command Line Pipeline (2024 main races)
 1. Pull raw data (per race)
 ```bash
 python src/data/pull_2024_races.py --cache-dir cache
@@ -62,11 +67,25 @@ python src/reports/case_study_max.py --round 14 --driver VER --model hgb
 ```
 
 ## Web App (Streamlit)
-Run locally:
+
+**🚀 [Try the Interactive App →](https://your-app-name.streamlit.app)** *(Update with your Streamlit Cloud URL)*
+
+Or run locally:
 ```bash
 streamlit run app.py
 ```
-The app lets you pick a round/driver/model and run Monte Carlo strategy sims.
+
+The interactive web app provides:
+- **Round/Driver Selection**: Pick any 2024 race and driver
+- **Model Choice**: Compare Ridge vs HistGradientBoosting predictions
+- **Monte Carlo Simulation**: Run 1-2000 simulations per strategy with realistic noise
+- **Strategy Comparison**: View top strategies ranked by total race time with uncertainty bands
+- **Pit Loss Modeling**: Auto-loads race-specific pit-loss distributions
+- **Residual Noise**: Optionally uses model residuals for realistic lap-time variation
+- **Visualizations**: Interactive bar charts (Altair) showing strategy comparisons
+- **Export**: Download results as CSV
+
+**Note**: The app requires pre-trained models and pre-computed metrics. Run the full pipeline (steps 1-5) before using the app.
 
 ## Results (2024 test rounds 17–24)
 - HGB MAE: **1.49s**, RMSE: **2.30s**
@@ -98,3 +117,15 @@ The app lets you pick a round/driver/model and run Monte Carlo strategy sims.
 - `reports/summary.md` with metrics + findings
 - `figures/` with plots (lap-time error, feature importance, strategy comparison)
 - `data/metrics/metrics.json`
+- Interactive Streamlit web app for strategy simulation
+
+## Deployment
+
+### Streamlit Cloud
+1. Push this repo to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Connect your GitHub repo
+4. Set main file to `app.py`
+5. Deploy!
+
+The app will automatically use the pre-trained models and metrics from the `data/` directory.
