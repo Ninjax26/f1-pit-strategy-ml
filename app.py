@@ -303,7 +303,14 @@ st.set_page_config(page_title="F1 Strategy Simulator", layout="wide")
 st.title("F1 Pit Strategy Simulator")
 st.caption("Lap-time ML + Monte Carlo pit strategy simulation")
 
-season = st.sidebar.number_input("Season", value=2024, step=1, min_value=2018, max_value=2026)
+season = st.sidebar.number_input(
+    "Season",
+    value=2024,
+    step=1,
+    min_value=2018,
+    max_value=2026,
+    help="Season to load features/metrics from.",
+)
 features_df = load_features(int(season))
 
 if features_df is None:
@@ -315,7 +322,12 @@ if not rounds:
     st.error("No rounds found in features dataset.")
     st.stop()
 
-selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1)
+selected_round = st.sidebar.selectbox(
+    "Round",
+    rounds,
+    index=len(rounds) - 1,
+    help="Race round number in the season.",
+)
 round_df = features_df[features_df["RoundNumber"] == selected_round].copy()
 
 if round_df.empty:
@@ -323,15 +335,30 @@ if round_df.empty:
     st.stop()
 
 available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
-selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=0)
+selected_driver = st.sidebar.selectbox(
+    "Driver",
+    available_drivers,
+    index=0,
+    help="Driver code (e.g., VER, ALO).",
+)
 
-model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0)
+model_name = st.sidebar.selectbox(
+    "Model",
+    ["hgb", "ridge"],
+    index=0,
+    help="Choose the ML model used to predict lap times.",
+)
 model = load_model(model_name)
 if model is None:
     st.error(f"Missing model: {MODELS_DIR / f'{model_name}_model.joblib'}")
     st.stop()
 
-max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1)
+max_stops = st.sidebar.selectbox(
+    "Max Stops",
+    [1, 2],
+    index=1,
+    help="Maximum number of pit stops allowed in generated strategies.",
+)
 
 metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
 pit_loss_stats = load_pit_loss(metrics_path, int(selected_round))
@@ -349,16 +376,42 @@ total_laps = int(race_df["LapNumber"].max())
 min_stint_max = max(1, min(20, total_laps))
 min_stint_default = max(1, total_laps // (max_stops + 1))
 min_stint_default = min(8, min_stint_default, min_stint_max)
-min_stint = st.sidebar.slider("Min Stint", 1, min_stint_max, min_stint_default)
+min_stint = st.sidebar.slider(
+    "Min Stint",
+    1,
+    min_stint_max,
+    min_stint_default,
+    help="Minimum laps per stint (prevents unrealistic short stints).",
+)
 
 max_stint_min = max(1, min_stint)
 max_stint_max = max(max_stint_min, min(50, total_laps))
 max_stint_default = min(35, max_stint_max)
-max_stint = st.sidebar.slider("Max Stint", max_stint_min, max_stint_max, max_stint_default)
+max_stint = st.sidebar.slider(
+    "Max Stint",
+    max_stint_min,
+    max_stint_max,
+    max_stint_default,
+    help="Maximum laps per stint.",
+)
 
-stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
-include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
-allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
+stint_step = st.sidebar.slider(
+    "Stint Step",
+    1,
+    5,
+    2,
+    help="Granularity for trying stint lengths (e.g., step=2 tries 8,10,12...).",
+)
+include_wet = st.sidebar.checkbox(
+    "Include Wet Compounds",
+    value=False,
+    help="Allow inters/wets in generated strategies if present in data.",
+)
+allow_single = st.sidebar.checkbox(
+    "Allow Single Compound",
+    value=False,
+    help="Allow 0-stop strategies (same compound all race).",
+)
 
 max_feasible_stops = max(0, total_laps // max(min_stint, 1) - 1)
 effective_max_stops = min(max_stops, max_feasible_stops)
@@ -367,15 +420,47 @@ if effective_max_stops < max_stops:
         f"Max Stops reduced to {effective_max_stops} based on Total Laps and Min Stint."
     )
 
-n_sims = st.sidebar.slider("Simulations", 1, 2000, 500, step=50)
-seed = st.sidebar.number_input("Random Seed", value=42, step=1)
-pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0)
-noise_sigma = st.sidebar.slider("Gaussian Noise Sigma", 0.0, 5.0, 0.0, step=0.1)
+n_sims = st.sidebar.slider(
+    "Simulations",
+    1,
+    2000,
+    500,
+    step=50,
+    help="Number of Monte Carlo simulations per strategy.",
+)
+seed = st.sidebar.number_input(
+    "Random Seed",
+    value=42,
+    step=1,
+    help="Set for repeatable results.",
+)
+pit_loss_mode = st.sidebar.selectbox(
+    "Pit Loss Mode",
+    ["sample", "fixed"],
+    index=0,
+    help="Sample pit-loss per stop or use a fixed value.",
+)
+noise_sigma = st.sidebar.slider(
+    "Gaussian Noise Sigma",
+    0.0,
+    5.0,
+    0.0,
+    step=0.1,
+    help="Adds Gaussian lap-time noise if residuals are not used.",
+)
 
-use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True)
+use_residuals = st.sidebar.checkbox(
+    "Use Residual Noise",
+    value=True,
+    help="Sample model residuals from evaluation data for more realistic noise.",
+)
 residuals = load_residuals_cached(model_name) if use_residuals else None
 
-custom_strategy = st.sidebar.text_input("Custom Strategy (optional)", value="")
+custom_strategy = st.sidebar.text_input(
+    "Custom Strategy (optional)",
+    value="",
+    help="Format: SOFT:18,MEDIUM:22,HARD:20. If set, only this strategy is simulated.",
+)
 
 st.subheader("Inputs")
 col1, col2, col3 = st.columns(3)
