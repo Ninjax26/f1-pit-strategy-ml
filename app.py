@@ -368,7 +368,7 @@ custom_strategy = st.sidebar.text_input("Custom Strategy (optional)", value="")
 st.subheader("Inputs")
 col1, col2, col3 = st.columns(3)
 with col1:
-st.metric("Total Laps", total_laps)
+    st.metric("Total Laps", total_laps)
 with col2:
     st.metric("Pit Loss Median (s)", f"{pit_loss_stats.get('median', 20.0):.2f}")
 with col3:
