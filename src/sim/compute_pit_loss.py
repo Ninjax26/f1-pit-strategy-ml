@@ -25,7 +25,15 @@ def _robust_filter(losses: list[float]) -> list[float]:
 
 def estimate_pit_loss(df: pd.DataFrame) -> dict:
     if "LapTime" not in df.columns:
-        return {"pit_loss_median": np.nan, "pit_loss_mean": np.nan, "n_events": 0, "base_lap_median": np.nan}
+        return {
+            "pit_loss_median": np.nan,
+            "pit_loss_mean": np.nan,
+            "pit_loss_std": np.nan,
+            "pit_loss_p10": np.nan,
+            "pit_loss_p90": np.nan,
+            "n_events": 0,
+            "base_lap_median": np.nan,
+        }
 
     df = df.copy()
     df["LapTimeSeconds"] = _to_seconds(df["LapTime"])
@@ -41,6 +49,8 @@ def estimate_pit_loss(df: pd.DataFrame) -> dict:
     if "TrackStatus" in clean.columns:
         status_str = clean["TrackStatus"].astype(str)
         clean = clean[~status_str.str.contains("4|5", regex=True)]
+    if clean.empty or clean["LapTimeSeconds"].dropna().empty:
+        clean = df[df["LapTimeSeconds"].notna()].copy()
 
     losses = []
 
@@ -70,13 +80,27 @@ def estimate_pit_loss(df: pd.DataFrame) -> dict:
 
     losses = _robust_filter(losses)
     if not losses:
-        return {"pit_loss_median": np.nan, "pit_loss_mean": np.nan, "n_events": 0, "base_lap_median": clean["LapTimeSeconds"].median()}
+        base_median = float(clean["LapTimeSeconds"].median()) if not clean.empty else np.nan
+        return {
+            "pit_loss_median": np.nan,
+            "pit_loss_mean": np.nan,
+            "pit_loss_std": np.nan,
+            "pit_loss_p10": np.nan,
+            "pit_loss_p90": np.nan,
+            "n_events": 0,
+            "base_lap_median": base_median,
+        }
 
+    losses_arr = np.array(losses, dtype=float)
+    loss_std = float(np.std(losses_arr, ddof=1)) if len(losses_arr) > 1 else 0.0
     return {
-        "pit_loss_median": float(np.median(losses)),
-        "pit_loss_mean": float(np.mean(losses)),
-        "n_events": int(len(losses)),
-        "base_lap_median": float(clean["LapTimeSeconds"].median()),
+        "pit_loss_median": float(np.median(losses_arr)),
+        "pit_loss_mean": float(np.mean(losses_arr)),
+        "pit_loss_std": loss_std,
+        "pit_loss_p10": float(np.quantile(losses_arr, 0.10)),
+        "pit_loss_p90": float(np.quantile(losses_arr, 0.90)),
+        "n_events": int(len(losses_arr)),
+        "base_lap_median": float(clean["LapTimeSeconds"].median()) if not clean.empty else np.nan,
     }
 
 

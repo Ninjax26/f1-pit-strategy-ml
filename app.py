@@ -1,23 +1,24 @@
-import argparse
+import json
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
+import streamlit as st
+import joblib
+
+try:
+    import altair as alt
+except Exception:  # pragma: no cover - optional
+    alt = None
 
 
-def _safe_float(value) -> float | None:
-    if value is None:
-        return None
-    try:
-        val = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if np.isnan(val) else val
+DATA_DIR = Path("data")
+FEATURES_DIR = DATA_DIR / "features"
+MODELS_DIR = DATA_DIR / "models"
+METRICS_DIR = DATA_DIR / "metrics"
 
 
 def parse_strategy(spec: str) -> list[tuple[str, int]]:
-    # Example: "SOFT:18,MEDIUM:22,HARD:20"
     stints = []
     for part in spec.split(","):
         compound, length = part.split(":")
@@ -48,7 +49,6 @@ def generate_strategies(
     if max_stint <= 0:
         max_stint = total_laps
 
-    # One-stop (2 stints)
     if max_stops >= 1:
         for c1 in compounds:
             for c2 in compounds:
@@ -61,7 +61,6 @@ def generate_strategies(
                     name = f"1stop_{c1[0]}-{c2[0]}_{s1}-{s2}"
                     strategies[name] = [(c1, s1), (c2, s2)]
 
-    # Two-stop (3 stints)
     if max_stops >= 2:
         for c1 in compounds:
             for c2 in compounds:
@@ -97,75 +96,14 @@ def build_laps(base_laps: pd.DataFrame, strategy: list[tuple[str, int]]) -> pd.D
     return laps
 
 
-def _to_seconds(series: pd.Series) -> pd.Series:
-    if np.issubdtype(series.dtype, np.timedelta64):
-        return series.dt.total_seconds()
-    return pd.to_numeric(series, errors="coerce")
-
-
-def _robust_filter(losses: list[float]) -> list[float]:
-    losses = [x for x in losses if pd.notna(x) and x > 0]
-    if len(losses) < 5:
-        return losses
-
-    q05, q95 = np.quantile(losses, [0.05, 0.95])
-    low = max(q05, 5.0)
-    high = min(q95, 60.0)
-    filtered = [x for x in losses if low <= x <= high]
-    return filtered if len(filtered) >= 3 else losses
-
-
-def estimate_pit_loss_from_raw(raw_df: pd.DataFrame) -> float | None:
-    if "LapTime" not in raw_df.columns:
+def _safe_float(value) -> float | None:
+    if value is None:
         return None
-
-    df = raw_df.copy()
-    df["LapTimeSeconds"] = _to_seconds(df["LapTime"])
-
-    clean = df.copy()
-    if "Deleted" in clean.columns:
-        clean = clean[clean["Deleted"] == False]
-    if "PitInTime" in clean.columns:
-        clean = clean[clean["PitInTime"].isna()]
-    if "PitOutTime" in clean.columns:
-        clean = clean[clean["PitOutTime"].isna()]
-    if "TrackStatus" in clean.columns:
-        status_str = clean["TrackStatus"].astype(str)
-        clean = clean[~status_str.str.contains("4|5", regex=True)]
-
-    if clean.empty:
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
         return None
-
-    losses = []
-    if "Driver" in df.columns and "LapNumber" in df.columns:
-        for driver, ddf in df.groupby("Driver"):
-            ddf = ddf.sort_values("LapNumber")
-            base = clean[clean["Driver"] == driver]["LapTimeSeconds"].median()
-            if np.isnan(base):
-                continue
-            pit_in = ddf[ddf["PitInTime"].notna()] if "PitInTime" in ddf.columns else ddf.iloc[0:0]
-            if pit_in.empty:
-                continue
-            for _, in_lap in pit_in.iterrows():
-                next_lap_number = int(in_lap["LapNumber"]) + 1
-                out_lap = ddf[ddf["LapNumber"] == next_lap_number]
-                if out_lap.empty or ("PitOutTime" in out_lap.columns and out_lap["PitOutTime"].isna().all()):
-                    continue
-                loss = (in_lap["LapTimeSeconds"] + out_lap.iloc[0]["LapTimeSeconds"]) - 2 * base
-                if pd.notna(loss):
-                    losses.append(loss)
-    else:
-        base = clean["LapTimeSeconds"].median()
-        in_laps = df[df["PitInTime"].notna()] if "PitInTime" in df.columns else df.iloc[0:0]
-        out_laps = df[df["PitOutTime"].notna()] if "PitOutTime" in df.columns else df.iloc[0:0]
-        losses.extend(list(in_laps["LapTimeSeconds"] - base))
-        losses.extend(list(out_laps["LapTimeSeconds"] - base))
-
-    losses = _robust_filter(losses)
-    if not losses:
-        return None
-
-    return float(np.median(losses))
+    return None if np.isnan(val) else val
 
 
 def _fixed_pit_loss_stats(value: float) -> dict:
@@ -256,90 +194,47 @@ def sample_residual(compound: str, residuals: dict | None, rng: np.random.Genera
     return float(rng.choice(arr))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Simulate pit strategies using a trained model")
-    parser.add_argument("--season", type=int, default=2024)
-    parser.add_argument("--features", type=str, default="data/features")
-    parser.add_argument("--raw-dir", type=str, default="data/raw")
-    parser.add_argument("--models-dir", type=str, default="data/models")
-    parser.add_argument("--metrics-dir", type=str, default="data/metrics")
-    parser.add_argument("--round", type=int, required=True)
-    parser.add_argument("--driver", type=str, required=True)
-    parser.add_argument("--model", type=str, default="hgb", choices=["ridge", "hgb"])
-    parser.add_argument("--strategy", type=str, default=None)
-    parser.add_argument("--pit-loss", type=str, default="auto")
-    parser.add_argument("--max-stops", type=int, default=2)
-    parser.add_argument("--min-stint", type=int, default=8)
-    parser.add_argument("--max-stint", type=int, default=35)
-    parser.add_argument("--stint-step", type=int, default=2)
-    parser.add_argument("--include-wet", action="store_true")
-    parser.add_argument("--allow-single-compound", action="store_true")
-    parser.add_argument("--top-n", type=int, default=10)
-    parser.add_argument("--n-sims", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--residuals", type=str, default=None)
-    parser.add_argument("--noise-sigma", type=float, default=None)
-    parser.add_argument("--pit-loss-mode", type=str, default="sample", choices=["sample", "fixed"])
-    args = parser.parse_args()
+@st.cache_data(show_spinner=False)
+def load_features(season: int) -> pd.DataFrame | None:
+    path = FEATURES_DIR / f"features_{season}.parquet"
+    if not path.exists():
+        return None
+    return pd.read_parquet(path)
 
-    features_path = Path(args.features) / f"features_{args.season}.parquet"
-    df = pd.read_parquet(features_path)
 
-    race_df = df[(df["RoundNumber"] == args.round) & (df["Driver"] == args.driver)].copy()
-    if race_df.empty:
-        raise ValueError("No laps found for that round/driver. Check driver code (e.g., VER, HAM).")
+@st.cache_resource(show_spinner=False)
+def load_model(model_name: str):
+    path = MODELS_DIR / f"{model_name}_model.joblib"
+    if not path.exists():
+        return None
+    return joblib.load(path)
 
-    race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
-    total_laps = int(race_df["LapNumber"].max())
 
-    model_path = Path(args.models_dir) / f"{args.model}_model.joblib"
-    model = joblib.load(model_path)
+@st.cache_data(show_spinner=False)
+def load_residuals_cached(model_name: str) -> dict | None:
+    path = METRICS_DIR / f"predictions_{model_name}.parquet"
+    return load_residuals(path)
 
-    if args.pit_loss.lower() != "auto":
-        pit_loss_stats = _fixed_pit_loss_stats(float(args.pit_loss))
-    else:
-        metrics_path = Path(args.metrics_dir) / f"pit_loss_{args.season}.csv"
-        pit_loss_stats = load_pit_loss(metrics_path, args.round)
-        if pit_loss_stats is None:
-            raw_path = list((Path(args.raw_dir) / str(args.season)).glob(f"round_{args.round:02d}_*/laps.parquet"))
-            if raw_path:
-                raw_df = pd.read_parquet(raw_path[0])
-                fallback = estimate_pit_loss_from_raw(raw_df)
-                if fallback is not None:
-                    pit_loss_stats = _fixed_pit_loss_stats(float(fallback))
-        if pit_loss_stats is None:
-            pit_loss_stats = _fixed_pit_loss_stats(20.0)
 
-    if args.strategy:
-        strategies = {"custom": parse_strategy(args.strategy)}
-    else:
-        compounds = available_compounds(race_df, args.include_wet)
-        strategies = generate_strategies(
-            total_laps,
-            compounds,
-            max_stops=args.max_stops,
-            min_stint=args.min_stint,
-            max_stint=args.max_stint,
-            step=args.stint_step,
-            require_two_compounds=not args.allow_single_compound,
-        )
-
-    rng = np.random.default_rng(args.seed)
-    residuals = None
-    if args.n_sims > 1 or args.noise_sigma is not None:
-        if args.residuals:
-            residuals = load_residuals(Path(args.residuals))
-        else:
-            default_residuals = Path(args.metrics_dir) / f"predictions_{args.model}.parquet"
-            residuals = load_residuals(default_residuals)
-
-    pit_loss_mode = args.pit_loss_mode
-    if args.n_sims <= 1:
-        pit_loss_mode = "fixed"
-
+def simulate_strategies(
+    race_df: pd.DataFrame,
+    model,
+    strategies: dict[str, list[tuple[str, int]]],
+    pit_loss_stats: dict,
+    n_sims: int,
+    pit_loss_mode: str,
+    residuals: dict | None,
+    noise_sigma: float | None,
+    seed: int | None,
+) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
     results = []
+
     target_is_delta = "LapTimeDelta" in race_df.columns and "RaceMedianLap" in race_df.columns
     race_median = race_df["RaceMedianLap"].iloc[0] if "RaceMedianLap" in race_df.columns else race_df["LapTimeSeconds"].median()
+
+    if n_sims <= 1:
+        pit_loss_mode = "fixed"
 
     for name, strategy in strategies.items():
         laps = build_laps(race_df, strategy)
@@ -349,7 +244,7 @@ def main() -> None:
             base_preds = base_preds + race_median
 
         n_stops = len(strategy) - 1
-        if args.n_sims <= 1:
+        if n_sims <= 1:
             pit_loss_value = sample_pit_loss(pit_loss_stats, rng, pit_loss_mode)
             total_time = float(np.sum(base_preds)) + pit_loss_value * n_stops
             results.append(
@@ -358,20 +253,20 @@ def main() -> None:
                     "total_time_s": total_time,
                     "pit_loss_s": pit_loss_value,
                     "stops": n_stops,
-                    "stints": strategy,
+                    "stints": json.dumps(strategy),
                 }
             )
         else:
             totals: list[float] = []
             pit_losses: list[float] = []
             compounds = laps.get("Compound", pd.Series([None] * len(laps)))
-            for _ in range(args.n_sims):
+            for _ in range(n_sims):
                 lap_preds = np.array(base_preds, dtype=float)
                 if residuals is not None:
                     noise = np.array([sample_residual(c, residuals, rng) for c in compounds])
                     lap_preds = lap_preds + noise
-                elif args.noise_sigma is not None and args.noise_sigma > 0:
-                    lap_preds = lap_preds + rng.normal(0.0, args.noise_sigma, size=lap_preds.shape[0])
+                elif noise_sigma is not None and noise_sigma > 0:
+                    lap_preds = lap_preds + rng.normal(0.0, noise_sigma, size=lap_preds.shape[0])
 
                 pit_loss_total = sum(sample_pit_loss(pit_loss_stats, rng, pit_loss_mode) for _ in range(n_stops))
                 pit_losses.append(pit_loss_total)
@@ -387,16 +282,145 @@ def main() -> None:
                     "total_time_p90_s": float(np.quantile(totals_arr, 0.90)),
                     "pit_loss_mean_s": float(np.mean(pit_losses)) if pit_losses else 0.0,
                     "stops": n_stops,
-                    "stints": strategy,
+                    "stints": json.dumps(strategy),
                 }
             )
 
-    if args.n_sims <= 1:
-        out = pd.DataFrame(results).sort_values("total_time_s").head(args.top_n)
+    if n_sims <= 1:
+        return pd.DataFrame(results).sort_values("total_time_s")
+    return pd.DataFrame(results).sort_values("total_time_mean_s")
+
+
+st.set_page_config(page_title="F1 Strategy Simulator", layout="wide")
+
+st.title("F1 Pit Strategy Simulator")
+st.caption("Lap-time ML + Monte Carlo pit strategy simulation")
+
+season = st.sidebar.number_input("Season", value=2024, step=1, min_value=2018, max_value=2026)
+features_df = load_features(int(season))
+
+if features_df is None:
+    st.error(f"Missing features file: {FEATURES_DIR / f'features_{season}.parquet'}")
+    st.stop()
+
+rounds = sorted(features_df["RoundNumber"].dropna().unique().astype(int))
+if not rounds:
+    st.error("No rounds found in features dataset.")
+    st.stop()
+
+selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1)
+round_df = features_df[features_df["RoundNumber"] == selected_round].copy()
+
+if round_df.empty:
+    st.error("No data for selected round.")
+    st.stop()
+
+available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
+selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=0)
+
+model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0)
+model = load_model(model_name)
+if model is None:
+    st.error(f"Missing model: {MODELS_DIR / f'{model_name}_model.joblib'}")
+    st.stop()
+
+max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1)
+min_stint = st.sidebar.slider("Min Stint", 4, 20, 8)
+max_stint = st.sidebar.slider("Max Stint", 15, 50, 35)
+stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
+include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
+allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
+
+n_sims = st.sidebar.slider("Simulations", 1, 2000, 500, step=50)
+seed = st.sidebar.number_input("Random Seed", value=42, step=1)
+pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0)
+noise_sigma = st.sidebar.slider("Gaussian Noise Sigma", 0.0, 5.0, 0.0, step=0.1)
+
+use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True)
+residuals = load_residuals_cached(model_name) if use_residuals else None
+
+custom_strategy = st.sidebar.text_input("Custom Strategy (optional)", value="")
+
+metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
+pit_loss_stats = load_pit_loss(metrics_path, int(selected_round))
+if pit_loss_stats is None:
+    pit_loss_stats = _fixed_pit_loss_stats(20.0)
+
+race_df = round_df[round_df["Driver"] == selected_driver].copy()
+if race_df.empty:
+    st.error("No laps found for that driver.")
+    st.stop()
+
+race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
+
+st.subheader("Inputs")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Total Laps", int(race_df["LapNumber"].max()))
+with col2:
+    st.metric("Pit Loss Median (s)", f"{pit_loss_stats.get('median', 20.0):.2f}")
+with col3:
+    st.metric("Pit Loss Std (s)", f"{pit_loss_stats.get('std', 0.0):.2f}")
+
+run = st.button("Run Simulation", type="primary")
+
+if run:
+    if custom_strategy.strip():
+        try:
+            strategies = {"custom": parse_strategy(custom_strategy.strip())}
+        except Exception as exc:
+            st.error(f"Invalid strategy format: {exc}")
+            st.stop()
     else:
-        out = pd.DataFrame(results).sort_values("total_time_mean_s").head(args.top_n)
-    print(out.to_string(index=False))
+        compounds = available_compounds(race_df, include_wet)
+        strategies = generate_strategies(
+            total_laps=int(race_df["LapNumber"].max()),
+            compounds=compounds,
+            max_stops=max_stops,
+            min_stint=min_stint,
+            max_stint=max_stint,
+            step=stint_step,
+            require_two_compounds=not allow_single,
+        )
 
+    results = simulate_strategies(
+        race_df=race_df,
+        model=model,
+        strategies=strategies,
+        pit_loss_stats=pit_loss_stats,
+        n_sims=n_sims,
+        pit_loss_mode=pit_loss_mode,
+        residuals=residuals,
+        noise_sigma=noise_sigma if not use_residuals else None,
+        seed=int(seed) if seed is not None else None,
+    )
 
-if __name__ == "__main__":
-    main()
+    st.subheader("Top Strategies")
+    st.dataframe(results.head(10), use_container_width=True)
+
+    if alt is not None and n_sims > 1:
+        chart = (
+            alt.Chart(results.head(10))
+            .mark_bar()
+            .encode(
+                x=alt.X("total_time_mean_s:Q", title="Mean Total Time (s)"),
+                y=alt.Y("strategy:N", sort="-x"),
+                tooltip=[
+                    "strategy",
+                    "total_time_mean_s",
+                    "total_time_p10_s",
+                    "total_time_p90_s",
+                    "pit_loss_mean_s",
+                ],
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
+
+    st.download_button(
+        "Download Results CSV",
+        results.to_csv(index=False).encode("utf-8"),
+        file_name="strategy_results.csv",
+        mime="text/csv",
+    )
+
+st.caption("Tip: Use residual noise with >= 500 sims for realistic uncertainty bands.")

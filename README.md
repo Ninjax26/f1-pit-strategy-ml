@@ -61,6 +61,13 @@ python src/sim/strategy_sim.py --round 14 --driver VER --pit-loss auto
 python src/reports/case_study_max.py --round 14 --driver VER --model hgb
 ```
 
+## Web App (Streamlit)
+Run locally:
+```bash
+streamlit run app.py
+```
+The app lets you pick a round/driver/model and run Monte Carlo strategy sims.
+
 ## Results (2024 test rounds 17–24)
 - HGB MAE: **1.49s**, RMSE: **2.30s**
 - Ridge MAE: **3.74s**, RMSE: **4.91s**
