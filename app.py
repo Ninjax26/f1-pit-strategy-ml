@@ -480,7 +480,8 @@ with col2:
 with col3:
     st.metric("Pit Loss Std (s)", f"{pit_loss_stats.get('std', 0.0):.2f}")
 
-run = st.button("Run Simulation", type="primary")
+auto_run = st.toggle("Auto-run on change", value=False, help="Re-run simulation when inputs change.")
+run = st.button("Run Simulation", type="primary") or auto_run
 
 if run:
     if custom_strategy.strip():
