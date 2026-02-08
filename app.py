@@ -49,6 +49,13 @@ def generate_strategies(
     if max_stint <= 0:
         max_stint = total_laps
 
+    if max_stops <= 0:
+        if not require_two_compounds:
+            for c1 in compounds:
+                name = f"0stop_{c1[0]}_{total_laps}"
+                strategies[name] = [(c1, total_laps)]
+        return strategies
+
     if max_stops >= 1:
         for c1 in compounds:
             for c2 in compounds:
@@ -340,10 +347,8 @@ race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
 total_laps = int(race_df["LapNumber"].max())
 
 min_stint_max = max(1, min(20, total_laps))
-min_stint_default = min(8, min_stint_max)
-if total_laps <= 12:
-    min_stint_default = max(1, total_laps // (max_stops + 1))
-    min_stint_default = min(min_stint_default, min_stint_max)
+min_stint_default = max(1, total_laps // (max_stops + 1))
+min_stint_default = min(8, min_stint_default, min_stint_max)
 min_stint = st.sidebar.slider("Min Stint", 1, min_stint_max, min_stint_default)
 
 max_stint_min = max(1, min_stint)
@@ -354,6 +359,13 @@ max_stint = st.sidebar.slider("Max Stint", max_stint_min, max_stint_max, max_sti
 stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
 include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
 allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
+
+max_feasible_stops = max(0, total_laps // max(min_stint, 1) - 1)
+effective_max_stops = min(max_stops, max_feasible_stops)
+if effective_max_stops < max_stops:
+    st.sidebar.warning(
+        f"Max Stops reduced to {effective_max_stops} based on Total Laps and Min Stint."
+    )
 
 n_sims = st.sidebar.slider("Simulations", 1, 2000, 500, step=50)
 seed = st.sidebar.number_input("Random Seed", value=42, step=1)
@@ -388,14 +400,17 @@ if run:
         strategies = generate_strategies(
             total_laps=int(race_df["LapNumber"].max()),
             compounds=compounds,
-            max_stops=max_stops,
+            max_stops=effective_max_stops,
             min_stint=min_stint,
             max_stint=max_stint,
             step=stint_step,
             require_two_compounds=not allow_single,
         )
         if not strategies:
-            st.error("No valid strategies with current constraints. Try lowering Min Stint or Max Stops.")
+            st.error(
+                "No valid strategies with current constraints. Try lowering Min Stint, "
+                "reducing Max Stops, or enabling Allow Single Compound (for 0-stop)."
+            )
             st.stop()
 
     results = simulate_strategies(
