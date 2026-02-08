@@ -303,6 +303,11 @@ st.set_page_config(page_title="F1 Strategy Simulator", layout="wide")
 st.title("F1 Pit Strategy Simulator")
 st.caption("Lap-time ML + Monte Carlo pit strategy simulation")
 
+st.info(
+    "💡 **Setup Required:** Run the full pipeline first (pull data → build features → train models → compute pit-loss → evaluate). "
+    "See README.md for the complete workflow. The app loads pre-trained models and pre-computed metrics."
+)
+
 season = st.sidebar.number_input(
     "Season",
     value=2024,
@@ -335,10 +340,14 @@ if round_df.empty:
     st.stop()
 
 available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
+# Default to VER if available, otherwise first driver
+default_driver_idx = 0
+if "VER" in available_drivers:
+    default_driver_idx = available_drivers.index("VER")
 selected_driver = st.sidebar.selectbox(
     "Driver",
     available_drivers,
-    index=0,
+    index=default_driver_idx,
     help="Driver code (e.g., VER, ALO).",
 )
 
@@ -530,6 +539,8 @@ if run:
             )
         )
         st.altair_chart(chart, use_container_width=True)
+    elif n_sims > 1 and alt is None:
+        st.caption("💡 Install `altair` to see a bar chart visualization of strategy comparisons.")
 
     st.download_button(
         "Download Results CSV",
