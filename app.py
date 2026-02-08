@@ -325,8 +325,32 @@ if model is None:
     st.stop()
 
 max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1)
-min_stint = st.sidebar.slider("Min Stint", 4, 20, 8)
-max_stint = st.sidebar.slider("Max Stint", 15, 50, 35)
+
+metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
+pit_loss_stats = load_pit_loss(metrics_path, int(selected_round))
+if pit_loss_stats is None:
+    pit_loss_stats = _fixed_pit_loss_stats(20.0)
+
+race_df = round_df[round_df["Driver"] == selected_driver].copy()
+if race_df.empty:
+    st.error("No laps found for that driver.")
+    st.stop()
+
+race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
+total_laps = int(race_df["LapNumber"].max())
+
+min_stint_max = max(1, min(20, total_laps))
+min_stint_default = min(8, min_stint_max)
+if total_laps <= 12:
+    min_stint_default = max(1, total_laps // (max_stops + 1))
+    min_stint_default = min(min_stint_default, min_stint_max)
+min_stint = st.sidebar.slider("Min Stint", 1, min_stint_max, min_stint_default)
+
+max_stint_min = max(1, min_stint)
+max_stint_max = max(max_stint_min, min(50, total_laps))
+max_stint_default = min(35, max_stint_max)
+max_stint = st.sidebar.slider("Max Stint", max_stint_min, max_stint_max, max_stint_default)
+
 stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
 include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
 allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
@@ -341,22 +365,10 @@ residuals = load_residuals_cached(model_name) if use_residuals else None
 
 custom_strategy = st.sidebar.text_input("Custom Strategy (optional)", value="")
 
-metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
-pit_loss_stats = load_pit_loss(metrics_path, int(selected_round))
-if pit_loss_stats is None:
-    pit_loss_stats = _fixed_pit_loss_stats(20.0)
-
-race_df = round_df[round_df["Driver"] == selected_driver].copy()
-if race_df.empty:
-    st.error("No laps found for that driver.")
-    st.stop()
-
-race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
-
 st.subheader("Inputs")
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Total Laps", int(race_df["LapNumber"].max()))
+st.metric("Total Laps", total_laps)
 with col2:
     st.metric("Pit Loss Median (s)", f"{pit_loss_stats.get('median', 20.0):.2f}")
 with col3:
@@ -382,6 +394,9 @@ if run:
             step=stint_step,
             require_two_compounds=not allow_single,
         )
+        if not strategies:
+            st.error("No valid strategies with current constraints. Try lowering Min Stint or Max Stops.")
+            st.stop()
 
     results = simulate_strategies(
         race_df=race_df,
