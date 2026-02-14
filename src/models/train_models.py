@@ -46,20 +46,17 @@ def build_preprocessor(df: pd.DataFrame):
         ]
         if c in df.columns
     ]
-
     categorical_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="most_frequent")),
             ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
         ]
     )
-
     numeric_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
         ]
     )
-
     preprocessor = ColumnTransformer(
         transformers=[
             ("cat", categorical_transformer, categorical),
@@ -83,7 +80,6 @@ def train_and_eval(
 ):
     model.fit(X_train, y_train)
     preds = model.predict(X_test)
-
     if target_is_delta and test_race_median is not None and y_test_seconds is not None:
         preds_seconds = preds + test_race_median.to_numpy()
         mae = mean_absolute_error(y_test_seconds, preds_seconds)
@@ -91,7 +87,6 @@ def train_and_eval(
     else:
         mae = mean_absolute_error(y_test, preds)
         rmse = np.sqrt(mean_squared_error(y_test, preds))
-
     return {"mae": mae, "rmse": rmse}
 
 
@@ -109,7 +104,6 @@ def main() -> None:
 
     features_path = Path(args.features) / f"features_{args.season}.parquet"
     df = pd.read_parquet(features_path)
-
     train_rounds = parse_rounds(args.train_rounds)
     test_rounds = parse_rounds(args.test_rounds)
 
@@ -120,29 +114,19 @@ def main() -> None:
 
     train_df = df[df["RoundNumber"].isin(train_rounds)].copy()
     test_df = df[df["RoundNumber"].isin(test_rounds)].copy()
-
     target = "LapTimeDelta" if "LapTimeDelta" in df.columns else "LapTimeSeconds"
     y_train = train_df[target]
     y_test = test_df[target]
-
     X_train = train_df.drop(columns=[target])
     X_test = test_df.drop(columns=[target])
     if "LapTimeSeconds" in X_train.columns:
         X_train = X_train.drop(columns=["LapTimeSeconds"])
         X_test = X_test.drop(columns=["LapTimeSeconds"])
-
     test_race_median = test_df["RaceMedianLap"] if "RaceMedianLap" in test_df.columns else None
     y_test_seconds = test_df["LapTimeSeconds"] if "LapTimeSeconds" in test_df.columns else None
 
     preprocessor, _, _ = build_preprocessor(df)
-
-    ridge = Pipeline(
-        steps=[
-            ("preprocess", preprocessor),
-            ("model", Ridge(alpha=1.0, random_state=42)),
-        ]
-    )
-
+    ridge = Pipeline(steps=[("preprocess", preprocessor), ("model", Ridge(alpha=1.0, random_state=42))])
     hgb = Pipeline(
         steps=[
             ("preprocess", preprocessor),
@@ -152,23 +136,13 @@ def main() -> None:
 
     metrics = {
         "ridge": train_and_eval(
-            "ridge",
-            ridge,
-            X_train,
-            y_train,
-            X_test,
-            y_test,
+            "ridge", ridge, X_train, y_train, X_test, y_test,
             target_is_delta=(target == "LapTimeDelta"),
             test_race_median=test_race_median,
             y_test_seconds=y_test_seconds,
         ),
         "hgb": train_and_eval(
-            "hgb",
-            hgb,
-            X_train,
-            y_train,
-            X_test,
-            y_test,
+            "hgb", hgb, X_train, y_train, X_test, y_test,
             target_is_delta=(target == "LapTimeDelta"),
             test_race_median=test_race_median,
             y_test_seconds=y_test_seconds,
@@ -177,16 +151,12 @@ def main() -> None:
         "test_rounds": test_rounds,
     }
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    joblib.dump(ridge, out_dir / "ridge_model.joblib")
-    joblib.dump(hgb, out_dir / "hgb_model.joblib")
-
-    metrics_dir = Path(args.metrics_dir)
-    metrics_dir.mkdir(parents=True, exist_ok=True)
-    with open(metrics_dir / "metrics.json", "w") as f:
+    Path(args.out_dir).mkdir(parents=True, exist_ok=True)
+    joblib.dump(ridge, Path(args.out_dir) / "ridge_model.joblib")
+    joblib.dump(hgb, Path(args.out_dir) / "hgb_model.joblib")
+    Path(args.metrics_dir).mkdir(parents=True, exist_ok=True)
+    with open(Path(args.metrics_dir) / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
-
     print(json.dumps(metrics, indent=2))
 
 
