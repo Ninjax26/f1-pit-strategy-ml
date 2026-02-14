@@ -200,7 +200,9 @@ def sample_residual(compound: str, residuals: dict | None, rng: np.random.Genera
     if residuals is None:
         return 0.0
     comp = str(compound).upper()
-    arr = residuals.get("by_compound", {}).get(comp) or residuals.get("global")
+    arr = residuals.get("by_compound", {}).get(comp)
+    if arr is None or len(arr) == 0:
+        arr = residuals.get("global")
     if arr is None or len(arr) == 0:
         return 0.0
     return float(rng.choice(arr))
