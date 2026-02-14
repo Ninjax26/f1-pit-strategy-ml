@@ -1,5 +1,6 @@
 """
 F1 Pit Strategy Simulator — Lap-time ML + Monte Carlo strategy simulation.
+Enhanced UI with Dashboard, Strategy Simulator, and Model Performance tabs.
 """
 import json
 from pathlib import Path
@@ -14,41 +15,28 @@ try:
 except Exception:
     alt = None
 
+from ui_styles import CUSTOM_CSS, COMPOUND_COLORS
+from ui_helpers import (
+    format_race_time, render_hero, render_how_it_works, render_model_comparison,
+    render_season_stats, render_best_strategy, generate_insights, render_insights,
+    render_strategy_table, render_stint_gallery, render_model_performance_tab,
+)
+from three_components import render_live_telemetry, render_simulation_loader
 
 DATA_DIR = Path("data")
 FEATURES_DIR = DATA_DIR / "features"
 MODELS_DIR = DATA_DIR / "models"
 METRICS_DIR = DATA_DIR / "metrics"
+FIGURES_DIR = Path("figures")
 
-# ----- Custom theme: F1-inspired dark + red -----
-st.set_page_config(
-    page_title="F1 Strategy Simulator",
-    page_icon="🏎️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ─── Page Config ───
+st.set_page_config(page_title="F1 Strategy Simulator", page_icon="🏎️", layout="wide", initial_sidebar_state="expanded")
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-    .main { background: linear-gradient(180deg, #0e0e0e 0%, #1a1a1a 50%, #0e0e0e 100%); }
-    .stApp { background: #0e0e0e; }
-    h1, h2, h3 { font-family: 'Orbitron', sans-serif !important; color: #e10600 !important; }
-    .stMetric { background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%); padding: 1rem; border-radius: 8px; border-left: 4px solid #e10600; }
-    .stMetric label { color: #b0b0b0 !important; }
-    .stMetric [data-testid="stMetricValue"] { color: #fff !important; font-family: 'JetBrains Mono', monospace !important; }
-    div[data-testid="stVerticalBlock"] > div { border-radius: 8px; }
-    .best-strategy { background: linear-gradient(135deg, #1a2e1a 0%, #0d1a0d 100%); padding: 1rem 1.5rem; border-radius: 12px; border: 1px solid #2e7d32; margin: 1rem 0; }
-    .hero { text-align: center; padding: 1.5rem 0; border-bottom: 2px solid #e10600; margin-bottom: 1.5rem; }
-    .hero h1 { font-size: 2.2rem !important; margin-bottom: 0.25rem !important; }
-    .hero p { color: #888; font-size: 1rem; }
-    .stButton > button { background: linear-gradient(90deg, #e10600 0%, #b80500 100%) !important; color: white !important; font-weight: 600 !important; border: none !important; padding: 0.6rem 1.5rem !important; border-radius: 8px !important; }
-    .stButton > button:hover { background: linear-gradient(90deg, #ff1a0d 0%, #e10600 100%) !important; box-shadow: 0 0 20px rgba(225,6,0,0.4); }
-    .model-badge { display: inline-block; background: #e10600; color: white; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.85rem; margin-right: 0.5rem; }
-    .sidebar .sidebar-content { background: #141414; }
-</style>
-""", unsafe_allow_html=True)
 
+# ═══════════════════════════════════════
+#   SIMULATION ENGINE (unchanged logic)
+# ═══════════════════════════════════════
 
 def parse_strategy(spec: str) -> list[tuple[str, int]]:
     stints = []
@@ -67,16 +55,8 @@ def available_compounds(race_df: pd.DataFrame, include_wet: bool) -> list[str]:
     return dry if dry else compounds
 
 
-def generate_strategies(
-    total_laps: int,
-    compounds: list[str],
-    max_stops: int,
-    min_stint: int,
-    max_stint: int,
-    step: int,
-    require_two_compounds: bool,
-) -> dict[str, list[tuple[str, int]]]:
-    strategies: dict[str, list[tuple[str, int]]] = {}
+def generate_strategies(total_laps, compounds, max_stops, min_stint, max_stint, step, require_two_compounds):
+    strategies = {}
     if max_stint <= 0:
         max_stint = total_laps
     if max_stops <= 0:
@@ -109,10 +89,9 @@ def generate_strategies(
     return strategies
 
 
-def build_laps(base_laps: pd.DataFrame, strategy: list[tuple[str, int]]) -> pd.DataFrame:
+def build_laps(base_laps, strategy):
     laps = base_laps.copy().reset_index(drop=True)
-    lap_idx = 0
-    stint_idx = 1
+    lap_idx, stint_idx = 0, 1
     for compound, length in strategy:
         for i in range(length):
             if lap_idx >= len(laps):
@@ -127,7 +106,7 @@ def build_laps(base_laps: pd.DataFrame, strategy: list[tuple[str, int]]) -> pd.D
     return laps
 
 
-def _safe_float(value) -> float | None:
+def _safe_float(value):
     if value is None:
         return None
     try:
@@ -137,11 +116,11 @@ def _safe_float(value) -> float | None:
     return None if np.isnan(val) else val
 
 
-def _fixed_pit_loss_stats(value: float) -> dict:
+def _fixed_pit_loss_stats(value):
     return {"median": value, "mean": value, "std": 0.0, "p10": value, "p90": value}
 
 
-def load_pit_loss(metrics_path: Path, round_number: int) -> dict | None:
+def load_pit_loss(metrics_path, round_number):
     if not metrics_path.exists():
         return None
     df = pd.read_csv(metrics_path)
@@ -158,7 +137,7 @@ def load_pit_loss(metrics_path: Path, round_number: int) -> dict | None:
     }
 
 
-def sample_pit_loss(stats: dict | None, rng: np.random.Generator, mode: str) -> float:
+def sample_pit_loss(stats, rng, mode):
     if stats is None:
         return 20.0
     median = stats.get("median")
@@ -173,7 +152,7 @@ def sample_pit_loss(stats: dict | None, rng: np.random.Generator, mode: str) -> 
     return float(np.clip(float(rng.normal(center, std)), 5.0, 60.0))
 
 
-def load_residuals(residuals_path: Path) -> dict | None:
+def load_residuals(residuals_path):
     if not residuals_path.exists():
         return None
     df = pd.read_parquet(residuals_path)
@@ -196,7 +175,7 @@ def load_residuals(residuals_path: Path) -> dict | None:
     return {"global": global_residuals, "by_compound": by_compound}
 
 
-def sample_residual(compound: str, residuals: dict | None, rng: np.random.Generator) -> float:
+def sample_residual(compound, residuals, rng):
     if residuals is None:
         return 0.0
     comp = str(compound).upper()
@@ -209,24 +188,24 @@ def sample_residual(compound: str, residuals: dict | None, rng: np.random.Genera
 
 
 @st.cache_data(show_spinner=False)
-def load_features(season: int) -> pd.DataFrame | None:
+def load_features(season):
     path = FEATURES_DIR / f"features_{season}.parquet"
     return pd.read_parquet(path) if path.exists() else None
 
 
 @st.cache_resource(show_spinner=False)
-def load_model(model_name: str):
+def load_model(model_name):
     path = MODELS_DIR / f"{model_name}_model.joblib"
     return joblib.load(path) if path.exists() else None
 
 
 @st.cache_data(show_spinner=False)
-def load_residuals_cached(model_name: str) -> dict | None:
+def load_residuals_cached(model_name):
     return load_residuals(METRICS_DIR / f"predictions_{model_name}.parquet")
 
 
 @st.cache_data(show_spinner=False)
-def load_model_metrics(season: int) -> dict | None:
+def load_model_metrics(season):
     path = METRICS_DIR / "metrics.json"
     if not path.exists():
         return None
@@ -234,17 +213,7 @@ def load_model_metrics(season: int) -> dict | None:
         return json.load(f)
 
 
-def simulate_strategies(
-    race_df: pd.DataFrame,
-    model,
-    strategies: dict[str, list[tuple[str, int]]],
-    pit_loss_stats: dict,
-    n_sims: int,
-    pit_loss_mode: str,
-    residuals: dict | None,
-    noise_sigma: float | None,
-    seed: int | None,
-) -> pd.DataFrame:
+def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_loss_mode, residuals, noise_sigma, seed):
     rng = np.random.default_rng(seed)
     results = []
     target_is_delta = "LapTimeDelta" in race_df.columns and "RaceMedianLap" in race_df.columns
@@ -292,160 +261,278 @@ def simulate_strategies(
     return pd.DataFrame(results).sort_values(key)
 
 
-# ----- UI -----
-st.markdown('<div class="hero"><h1>🏎️ F1 Pit Strategy Simulator</h1><p>Lap-time ML + Monte Carlo strategy simulation</p></div>', unsafe_allow_html=True)
+# ═══════════════════════════════════════
+#   UI LAYOUT
+# ═══════════════════════════════════════
 
-st.info("💡 **Setup:** Run the pipeline first (pull data → build features → train models → compute pit-loss → evaluate). See README for the workflow.")
+render_hero()
 
-
-season = st.sidebar.number_input("Season", value=2024, step=1, min_value=2018, max_value=2026)
+# --- Load data ---
+season = st.sidebar.number_input("🗓️ Season", value=2024, step=1, min_value=2018, max_value=2026)
 features_df = load_features(int(season))
 if features_df is None:
     st.error(f"Missing features: {FEATURES_DIR / f'features_{season}.parquet'}")
     st.stop()
 
-rounds = sorted(features_df["RoundNumber"].dropna().unique().astype(int))
-if not rounds:
-    st.error("No rounds in features.")
-    st.stop()
-
-selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1)
-round_df = features_df[features_df["RoundNumber"] == selected_round].copy()
-if round_df.empty:
-    st.error("No data for selected round.")
-    st.stop()
-
-available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
-default_driver_idx = available_drivers.index("VER") if "VER" in available_drivers else 0
-selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=default_driver_idx)
-
-model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0)
-model = load_model(model_name)
-if model is None:
-    st.error(f"Missing model: {MODELS_DIR / f'{model_name}_model.joblib'}")
-    st.stop()
-
-# Model metrics
 model_metrics = load_model_metrics(int(season))
-if model_metrics and model_name in model_metrics and isinstance(model_metrics[model_name], dict):
-    m = model_metrics[model_name]
+
+# --- Tabs ---
+tab_dashboard, tab_simulator, tab_model = st.tabs(["🏠 Dashboard", "🏎️ Strategy Simulator", "📊 Model Performance"])
+
+# ═══════════════════════════════════════
+#   TAB 1: DASHBOARD
+# ═══════════════════════════════════════
+with tab_dashboard:
+    st.markdown("### 🏁 Project Overview")
+    st.markdown("""
+    <div class="glass-card">
+        <p style="color:#ccc;font-size:1rem;line-height:1.7;margin:0;">
+            This project uses <strong style="color:#e10600;">machine learning</strong> to predict Formula 1 lap times, then runs
+            <strong style="color:#e10600;">Monte Carlo simulations</strong> to find the optimal pit stop strategy for any driver at any race.
+            The model considers tire compound, tire age, weather conditions, and track-specific factors to predict how fast each lap will be
+            under different strategy scenarios — then simulates thousands of race variations to account for real-world uncertainty.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    render_how_it_works()
+    st.markdown("---")
+
+    # Animated telemetry dashboard
+    st.markdown("### 📡 Live Telemetry Preview")
+    render_live_telemetry(height=220)
+    st.markdown("---")
+
+    if model_metrics:
+        render_model_comparison(model_metrics)
+        st.markdown("---")
+
+    render_season_stats(features_df)
+
+    st.markdown("---")
+    st.markdown("### 🎯 Key Technical Highlights")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("""
+        <div class="glass-card">
+            <h3>🔬 Feature Engineering</h3>
+            <p style="color:#999;font-size:0.85rem;line-height:1.6;">
+                20+ features including tire degradation curves, weather interpolation, safety car flags, and race-normalized lap deltas.
+            </p>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown("""
+        <div class="glass-card">
+            <h3>📐 Time-Based CV</h3>
+            <p style="color:#999;font-size:0.85rem;line-height:1.6;">
+                Rolling train/test splits mimic real deployment — model is always tested on future races it hasn't seen.
+            </p>
+        </div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown("""
+        <div class="glass-card">
+            <h3>🎲 Monte Carlo Engine</h3>
+            <p style="color:#999;font-size:0.85rem;line-height:1.6;">
+                Up to 2000 simulations per strategy with residual-based noise and race-specific pit loss distributions.
+            </p>
+        </div>""", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════
+#   TAB 2: STRATEGY SIMULATOR
+# ═══════════════════════════════════════
+with tab_simulator:
+    # Sidebar controls
+    rounds = sorted(features_df["RoundNumber"].dropna().unique().astype(int))
+    if not rounds:
+        st.error("No rounds in features.")
+        st.stop()
+
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f"**📊 Model metrics (test)**")
-    st.sidebar.markdown(f"MAE: **{m.get('mae', 0):.2f}s** · RMSE: **{m.get('rmse', 0):.2f}s**")
+    st.sidebar.markdown("### 🏎️ Race Setup")
+    selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1)
+    round_df = features_df[features_df["RoundNumber"] == selected_round].copy()
+    if round_df.empty:
+        st.error("No data for selected round.")
+        st.stop()
 
-max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1)
-metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
-pit_loss_stats = load_pit_loss(metrics_path, int(selected_round)) or _fixed_pit_loss_stats(20.0)
+    event_name = round_df["EventName"].iloc[0] if "EventName" in round_df.columns else f"Round {selected_round}"
+    st.sidebar.markdown(f"""
+    <div class="sidebar-info">
+        <span class="si-icon">📍</span>
+        <span class="si-text"><strong>{event_name}</strong></span>
+    </div>
+    """, unsafe_allow_html=True)
 
-race_df = round_df[round_df["Driver"] == selected_driver].copy()
-if race_df.empty:
-    st.error("No laps for that driver.")
-    st.stop()
-race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
-total_laps = int(race_df["LapNumber"].max())
+    available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
+    default_driver_idx = available_drivers.index("VER") if "VER" in available_drivers else 0
+    selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=default_driver_idx)
 
-min_stint_max = max(1, min(20, total_laps))
-min_stint_default = min(8, max(1, total_laps // (max_stops + 1)), min_stint_max)
-min_stint = st.sidebar.slider("Min Stint", 1, min_stint_max, min_stint_default)
-max_stint_min = max(1, min_stint)
-max_stint_max = max(max_stint_min, min(50, total_laps))
-max_stint = st.sidebar.slider("Max Stint", max_stint_min, max_stint_max, min(35, max_stint_max))
-stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
-include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
-allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🤖 Model")
+    model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0)
+    model = load_model(model_name)
+    if model is None:
+        st.error(f"Missing model: {MODELS_DIR / f'{model_name}_model.joblib'}")
+        st.stop()
 
-max_feasible_stops = max(0, total_laps // max(min_stint, 1) - 1)
-effective_max_stops = min(max_stops, max_feasible_stops)
-if effective_max_stops < max_stops:
-    st.sidebar.warning(f"Max Stops reduced to {effective_max_stops}.")
+    if model_metrics and model_name in model_metrics:
+        m = model_metrics[model_name]
+        st.sidebar.markdown(f"""
+        <div class="sidebar-info">
+            <span class="si-icon">📊</span>
+            <span class="si-text">MAE: <span class="si-value">{m.get('mae', 0):.2f}s</span> · RMSE: <span class="si-value">{m.get('rmse', 0):.2f}s</span></span>
+        </div>
+        """, unsafe_allow_html=True)
 
-n_sims = st.sidebar.slider("Simulations", 1, 2000, 200, step=50)
-seed = st.sidebar.number_input("Random Seed", value=42, step=1)
-pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0)
-noise_sigma = st.sidebar.slider("Gaussian Noise Sigma", 0.0, 5.0, 0.0, step=0.1)
-use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True)
-residuals = load_residuals_cached(model_name) if use_residuals else None
-custom_strategy = st.sidebar.text_input("Custom Strategy (optional)", value="", placeholder="SOFT:18,MEDIUM:22,HARD:20")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ⚙️ Strategy Parameters")
+    max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1)
+    metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
+    pit_loss_stats = load_pit_loss(metrics_path, int(selected_round)) or _fixed_pit_loss_stats(20.0)
 
-st.subheader("📋 Inputs")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Total Laps", int(total_laps))
-with col2:
-    st.metric("Pit Loss Median (s)", f"{pit_loss_stats.get('median', 20.0):.2f}")
-with col3:
-    st.metric("Pit Loss Std (s)", f"{pit_loss_stats.get('std', 0.0):.2f}")
+    race_df = round_df[round_df["Driver"] == selected_driver].copy()
+    if race_df.empty:
+        st.error("No laps for that driver.")
+        st.stop()
+    race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
+    total_laps = int(race_df["LapNumber"].max())
 
-run = st.button("▶ Run Simulation", type="primary")
+    min_stint_max = max(1, min(20, total_laps))
+    min_stint_default = min(8, max(1, total_laps // (max_stops + 1)), min_stint_max)
+    min_stint = st.sidebar.slider("Min Stint Length", 1, min_stint_max, min_stint_default)
+    max_stint_min = max(1, min_stint)
+    max_stint_max = max(max_stint_min, min(50, total_laps))
+    max_stint = st.sidebar.slider("Max Stint Length", max_stint_min, max_stint_max, min(35, max_stint_max))
+    stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
+    include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
+    allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
 
-if run:
-    with st.spinner("Running Monte Carlo simulation…"):
-        try:
-            if custom_strategy.strip():
-                strategies = {"custom": parse_strategy(custom_strategy.strip())}
-            else:
-                compounds = available_compounds(race_df, include_wet)
-                strategies = generate_strategies(
-                    total_laps=int(race_df["LapNumber"].max()),
-                    compounds=compounds,
-                    max_stops=effective_max_stops,
-                    min_stint=min_stint,
-                    max_stint=max_stint,
-                    step=stint_step,
-                    require_two_compounds=not allow_single,
-                )
-                if not strategies:
-                    st.error("No valid strategies. Try lowering Min Stint or enabling Allow Single Compound.")
-                    st.stop()
+    max_feasible_stops = max(0, total_laps // max(min_stint, 1) - 1)
+    effective_max_stops = min(max_stops, max_feasible_stops)
+    if effective_max_stops < max_stops:
+        st.sidebar.warning(f"Max Stops reduced to {effective_max_stops}.")
 
-            results = simulate_strategies(
-                race_df=race_df,
-                model=model,
-                strategies=strategies,
-                pit_loss_stats=pit_loss_stats,
-                n_sims=n_sims,
-                pit_loss_mode=pit_loss_mode,
-                residuals=residuals,
-                noise_sigma=noise_sigma if not use_residuals else None,
-                seed=int(seed) if seed is not None else None,
-            )
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🎲 Simulation")
+    n_sims = st.sidebar.slider("Simulations", 1, 2000, 200, step=50)
+    seed = st.sidebar.number_input("Random Seed", value=42, step=1)
+    pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0)
+    noise_sigma = st.sidebar.slider("Gaussian Noise σ", 0.0, 5.0, 0.0, step=0.1)
+    use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True)
+    residuals = load_residuals_cached(model_name) if use_residuals else None
+    custom_strategy = st.sidebar.text_input("Custom Strategy", value="", placeholder="SOFT:18,MEDIUM:22,HARD:20")
 
-            st.success(f"✅ Simulated **{len(results)}** strategies with **{n_sims}** run(s) each.")
+    # Race info header
+    st.markdown(f"### 🏁 {event_name} — {selected_driver}")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Total Laps", int(total_laps))
+    with c2:
+        st.metric("Pit Loss (median)", f"{pit_loss_stats.get('median', 20.0):.1f}s")
+    with c3:
+        st.metric("Model", model_name.upper())
+    with c4:
+        st.metric("Simulations", n_sims)
 
-            # Best strategy callout
-            if n_sims > 1 and "total_time_mean_s" in results.columns:
-                best = results.iloc[0]
-                st.markdown(f'<div class="best-strategy"><strong>🏆 Best strategy</strong>: <code>{best["strategy"]}</code> — Mean total time: <strong>{best["total_time_mean_s"]:.2f}s</strong> (P10–P90: {best["total_time_p10_s"]:.2f}s – {best["total_time_p90_s"]:.2f}s)</div>', unsafe_allow_html=True)
-            elif "total_time_s" in results.columns:
-                best = results.iloc[0]
-                st.markdown(f'<div class="best-strategy"><strong>🏆 Best strategy</strong>: <code>{best["strategy"]}</code> — Total time: <strong>{best["total_time_s"]:.2f}s</strong></div>', unsafe_allow_html=True)
+    run = st.button("▶ Run Simulation", type="primary", use_container_width=True)
 
-            st.subheader("📊 Top strategies")
-            display_df = results.head(15)
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-            if alt and n_sims > 1 and "total_time_mean_s" in display_df.columns:
-                chart = (
-                    alt.Chart(display_df.head(10))
-                    .mark_bar()
-                    .encode(
-                        x=alt.X("total_time_mean_s:Q", title="Mean total time (s)"),
-                        y=alt.Y("strategy:N", sort="-x"),
-                        tooltip=["strategy", "total_time_mean_s", "total_time_p10_s", "total_time_p90_s", "pit_loss_mean_s"],
+    if run:
+        with st.spinner("🏎️ Running Monte Carlo simulation…"):
+            try:
+                if custom_strategy.strip():
+                    strategies = {"custom": parse_strategy(custom_strategy.strip())}
+                else:
+                    compounds = available_compounds(race_df, include_wet)
+                    strategies = generate_strategies(
+                        total_laps=int(race_df["LapNumber"].max()),
+                        compounds=compounds, max_stops=effective_max_stops,
+                        min_stint=min_stint, max_stint=max_stint, step=stint_step,
+                        require_two_compounds=not allow_single,
                     )
+                    if not strategies:
+                        st.error("No valid strategies. Try lowering Min Stint or enabling Allow Single Compound.")
+                        st.stop()
+
+                results = simulate_strategies(
+                    race_df=race_df, model=model, strategies=strategies,
+                    pit_loss_stats=pit_loss_stats, n_sims=n_sims, pit_loss_mode=pit_loss_mode,
+                    residuals=residuals, noise_sigma=noise_sigma if not use_residuals else None,
+                    seed=int(seed) if seed is not None else None,
                 )
-                st.altair_chart(chart, use_container_width=True)
 
-            st.download_button(
-                "Download results CSV",
-                results.to_csv(index=False).encode("utf-8"),
-                file_name="strategy_results.csv",
-                mime="text/csv",
-            )
-        except Exception as e:
-            st.error(f"Simulation failed: {e}")
-            st.exception(e)
-else:
-    st.caption("👆 Click **Run Simulation** to see strategy rankings and best strategy.")
+                st.success(f"✅ Simulated **{len(results)}** strategies × **{n_sims}** runs each")
 
-st.caption("Tip: Use residual noise with ≥200 sims for realistic uncertainty bands.")
+                # Best strategy hero
+                best = results.iloc[0]
+                render_best_strategy(best, n_sims, total_laps)
+
+                # Insights
+                insights = generate_insights(results, n_sims)
+                render_insights(insights)
+
+                # Strategy visual breakdown
+                st.markdown("---")
+                render_stint_gallery(results, total_laps, top_n=8)
+
+                # Comparison chart
+                if alt and len(results) > 1:
+                    st.markdown("---")
+                    st.markdown("#### 📊 Strategy Comparison")
+                    is_mc = n_sims > 1
+                    chart_df = results.head(12).copy()
+                    time_key = "total_time_mean_s" if is_mc else "total_time_s"
+                    best_time = chart_df[time_key].min()
+                    chart_df["delta"] = chart_df[time_key] - best_time
+
+                    base = alt.Chart(chart_df).encode(
+                        y=alt.Y("strategy:N", sort=alt.EncodingSortField(field="delta", order="ascending"), title=None),
+                    )
+                    bars = base.mark_bar(cornerRadiusEnd=6, color="#e10600", height=16).encode(
+                        x=alt.X("delta:Q", title="Time delta to best strategy (seconds)"),
+                        tooltip=["strategy", alt.Tooltip(f"{time_key}:Q", title="Total Time", format=".1f"),
+                                 alt.Tooltip("delta:Q", title="Δ to best", format=".1f"), "stops"],
+                    )
+                    if is_mc and "total_time_p10_s" in chart_df.columns:
+                        chart_df["err_low"] = chart_df["total_time_p10_s"] - best_time
+                        chart_df["err_high"] = chart_df["total_time_p90_s"] - best_time
+                        whiskers = alt.Chart(chart_df).mark_rule(color="#ff6666", strokeWidth=2).encode(
+                            y=alt.Y("strategy:N", sort=alt.EncodingSortField(field="delta", order="ascending")),
+                            x="err_low:Q", x2="err_high:Q",
+                        )
+                        chart = (whiskers + bars)
+                    else:
+                        chart = bars
+                    chart = chart.properties(height=max(250, len(chart_df) * 35)).configure_axis(
+                        labelColor="#888", titleColor="#aaa", gridColor="#1a1a1a"
+                    ).configure_view(strokeWidth=0)
+                    st.altair_chart(chart, use_container_width=True)
+
+                # Results table
+                st.markdown("---")
+                st.markdown("#### 📋 Full Rankings")
+                render_strategy_table(results, n_sims, total_laps)
+
+                st.download_button(
+                    "📥 Download Results CSV", results.to_csv(index=False).encode("utf-8"),
+                    file_name="strategy_results.csv", mime="text/csv",
+                )
+            except Exception as e:
+                st.error(f"Simulation failed: {e}")
+                st.exception(e)
+    else:
+        # Animated telemetry as pre-run visual
+        render_live_telemetry(height=200)
+        st.markdown("""
+        <div class="glass-card" style="text-align:center;padding:2rem;">
+            <p style="color:#bbb;font-size:1.1rem;">Select your race, driver, and parameters in the sidebar<br>then click <strong style="color:#e10600;">Run Simulation</strong> to find the optimal pit strategy.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("💡 Tip: Use residual noise with ≥200 sims for realistic uncertainty bands.")
+
+
+# ═══════════════════════════════════════
+#   TAB 3: MODEL PERFORMANCE
+# ═══════════════════════════════════════
+with tab_model:
+    render_model_performance_tab(METRICS_DIR, FIGURES_DIR)
