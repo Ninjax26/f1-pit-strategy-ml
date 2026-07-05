@@ -1,0 +1,31 @@
+{
+  "sklearn_version": "1.8.0",
+  "training_date": "2026-07-06",
+  "model_type": "Pipeline",
+  "feature_list": [
+    "AirTemp",
+    "Compound",
+    "Driver",
+    "EventName",
+    "Humidity",
+    "IsPitLap",
+    "IsSafetyCar",
+    "LapNumber",
+    "RaceMedianLap",
+    "RoundNumber",
+    "Season",
+    "SessionName",
+    "Stint",
+    "Team",
+    "TrackStatus",
+    "TrackTemp",
+    "TyreLife",
+    "WindDirection",
+    "WindSpeed"
+  ],
+  "n_features": 19,
+  "training_data": "features_2024.parquet (Rounds 1-16)",
+  "target_variable": "LapTimeDelta",
+  "model_name": "ridge_model",
+  "estimator_type": "Ridge"
+}

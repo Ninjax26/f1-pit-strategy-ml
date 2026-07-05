@@ -205,6 +205,7 @@ def render_feature_importance(metrics_dir: Path):
 
     fi_path = metrics_dir / "feature_importance_hgb.csv"
     if not fi_path.exists():
+        st.info("Feature importance data not available. Run evaluation pipeline to generate it.")
         return
 
     st.markdown("### Feature Importance")
@@ -229,9 +230,11 @@ def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
     import altair as alt
 
     st.markdown("### Model Accuracy")
-    model_toggle = st.radio("Select Model", ["hgb", "ridge"], horizontal=True, index=0)
+    model_toggle = st.radio("Select Model", ["hgb", "ridge"], horizontal=True, index=0, key="perf_model_toggle")
     label_map = {"hgb": "HGB (Gradient Boosting)", "ridge": "Ridge Regression"}
     st.markdown(f"**Results for: {label_map[model_toggle]}**")
+
+    sections_rendered = 0
 
     rolling_path = metrics_dir / f"rolling_metrics_{model_toggle}.json"
     if rolling_path.exists():
@@ -249,6 +252,7 @@ def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
                 labelColor="#888", titleColor="#aaa", gridColor="#222"
             ).configure_view(strokeWidth=0)
             st.altair_chart(chart, width='stretch')
+            sections_rendered += 1
 
     compound_path = metrics_dir / f"mae_by_compound_{model_toggle}.csv"
     if compound_path.exists():
@@ -262,6 +266,7 @@ def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
             tooltip=["Compound", alt.Tooltip("mae:Q", format=".2f"), alt.Tooltip("rmse:Q", format=".2f"), "n"],
         ).properties(height=300).configure_axis(labelColor="#888", titleColor="#aaa", gridColor="#222").configure_view(strokeWidth=0)
         st.altair_chart(chart, width='stretch')
+        sections_rendered += 1
 
     round_path = metrics_dir / f"mae_by_round_{model_toggle}.csv"
     if round_path.exists():
@@ -273,6 +278,7 @@ def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
             tooltip=["RoundNumber", alt.Tooltip("mae:Q", format=".2f"), alt.Tooltip("rmse:Q", format=".2f"), "n"],
         ).properties(height=300).configure_axis(labelColor="#888", titleColor="#aaa", gridColor="#222").configure_view(strokeWidth=0)
         st.altair_chart(chart, width='stretch')
+        sections_rendered += 1
 
     figs = list(figures_dir.glob(f"*{model_toggle}*.png"))
     if figs:
@@ -281,3 +287,11 @@ def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
         for i, fig in enumerate(figs):
             with fig_cols[i % len(fig_cols)]:
                 st.image(str(fig), caption=fig.stem.replace("_", " ").title(), width='stretch')
+        sections_rendered += 1
+
+    if sections_rendered == 0:
+        st.info(
+            "No evaluation data found for this model. "
+            "Run the evaluation pipeline to generate metrics: "
+            "`python -m src.models.evaluate`"
+        )

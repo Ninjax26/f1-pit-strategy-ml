@@ -1,0 +1,8 @@
+{
+  "models": [
+    "hgb_model",
+    "ridge_model"
+  ],
+  "sklearn_version": "1.8.0",
+  "training_date": "2026-07-06"
+}
