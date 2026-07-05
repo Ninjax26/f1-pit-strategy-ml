@@ -1,0 +1,62 @@
+[
+  {
+    "experiment":"Baseline 2024 R1-16 \u2192 R17-24",
+    "train_set":"2024 Rounds 1\u201316",
+    "test_set":"2024 Rounds 17\u201324",
+    "model":"hgb",
+    "mae":1.412,
+    "rmse":2.2497,
+    "n_test":7454,
+    "unseen_track_rows":8223
+  },
+  {
+    "experiment":"Baseline 2024 R1-16 \u2192 R17-24",
+    "train_set":"2024 Rounds 1\u201316",
+    "test_set":"2024 Rounds 17\u201324",
+    "model":"ridge",
+    "mae":3.7407,
+    "rmse":4.9131,
+    "n_test":7454,
+    "unseen_track_rows":8223
+  },
+  {
+    "experiment":"Exp1 2022+2023+2024 \u2192 2025",
+    "train_set":"2022+2023+2024 (full seasons)",
+    "test_set":"2025 (25 rounds)",
+    "model":"hgb",
+    "mae":1.3351,
+    "rmse":2.7316,
+    "n_test":24747,
+    "unseen_track_rows":0
+  },
+  {
+    "experiment":"Exp1 2022+2023+2024 \u2192 2025",
+    "train_set":"2022+2023+2024 (full seasons)",
+    "test_set":"2025 (25 rounds)",
+    "model":"ridge",
+    "mae":1.585,
+    "rmse":2.545,
+    "n_test":24747,
+    "unseen_track_rows":0
+  },
+  {
+    "experiment":"Exp2 2021 \u2192 2022 (reg-shift)",
+    "train_set":"2021 (full season)",
+    "test_set":"2022 (full season)",
+    "model":"hgb",
+    "mae":2.1308,
+    "rmse":4.0414,
+    "n_test":21683,
+    "unseen_track_rows":5330
+  },
+  {
+    "experiment":"Exp2 2021 \u2192 2022 (reg-shift)",
+    "train_set":"2021 (full season)",
+    "test_set":"2022 (full season)",
+    "model":"ridge",
+    "mae":2.4039,
+    "rmse":3.9743,
+    "n_test":21683,
+    "unseen_track_rows":5330
+  }
+]

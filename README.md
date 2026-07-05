@@ -16,6 +16,7 @@ This project is an interactive decision-support application that helps evaluate 
 ![Dashboard](docs/assets/dashboard.png)
 ![Simulator](docs/assets/simulator.png)
 ![Model Performance](docs/assets/model_performance.png)
+![Feature Importance](docs/assets/feature_importance.png)
 
 ---
 
@@ -45,6 +46,7 @@ Modern Formula 1 strategy decisions depend on balancing tyre degradation, weathe
 |---|---|
 | 🎮 **Interactive Strategy Simulator** | Compare strategies, view confidence intervals, and explore optimal pit windows |
 | 📊 **Race Dashboard** | View live telemetry, model metrics, and season-at-a-glance stats |
+| 📈 **Feature Importance** | Interactive permutation importance graph to explain which features influence predictions most |
 | ✏️ **Custom Strategy Input** | Test any user-defined pit plan (e.g. `SOFT:18,MEDIUM:22,HARD:20`) |
 | 🎲 **Monte Carlo Simulation** | Up to 2,000 simulations per strategy with residual-based lap noise and pit loss sampling. [Read more](docs/MONTE_CARLO.md) |
 | 🧠 **Machine Learning Prediction** | Dual-model training (Ridge + HistGradientBoosting) with rolling train/test splits. [Read more](docs/ML_PIPELINE.md) |

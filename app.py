@@ -20,6 +20,7 @@ from ui_helpers import (
     format_race_time, render_hero, render_how_it_works, render_model_comparison,
     render_season_stats, render_best_strategy, generate_insights, render_insights,
     render_strategy_table, render_stint_gallery, render_model_performance_tab,
+    render_feature_importance,
 )
 from three_components import render_live_telemetry, render_simulation_loader
 
@@ -535,4 +536,6 @@ with tab_simulator:
 #   TAB 3: MODEL PERFORMANCE
 # ═══════════════════════════════════════
 with tab_model:
+    render_feature_importance(METRICS_DIR)
+    st.markdown("---")
     render_model_performance_tab(METRICS_DIR, FIGURES_DIR)

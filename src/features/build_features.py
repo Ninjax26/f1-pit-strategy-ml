@@ -5,28 +5,19 @@ import numpy as np
 import pandas as pd
 
 
-def load_all_parquets(raw_root: Path) -> pd.DataFrame:
+def load_all_parquets(raw_root: Path, season: int) -> pd.DataFrame:
+    """Load all lap parquets for a single season directory."""
     paths = list(raw_root.glob("round_*_*/laps.parquet"))
     if not paths:
         raise FileNotFoundError(f"No parquet files found in {raw_root}")
-    frames = [pd.read_parquet(p) for p in paths]
-    return pd.concat(frames, ignore_index=True)
+    frames = [pd.read_parquet(p) for p in sorted(paths)]
+    df = pd.concat(frames, ignore_index=True)
+    df["Season"] = season
+    return df
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Build clean feature dataset")
-    parser.add_argument("--season", type=int, default=2024)
-    parser.add_argument("--raw-dir", type=str, default="data/raw")
-    parser.add_argument("--out-dir", type=str, default="data/features")
-    parser.add_argument("--exclude-safety-cars", action="store_true")
-    args = parser.parse_args()
-
-    raw_root = Path(args.raw_dir) / str(args.season)
-    out_root = Path(args.out_dir)
-    out_root.mkdir(parents=True, exist_ok=True)
-
-    df = load_all_parquets(raw_root)
-
+def build_feature_df(df: pd.DataFrame, exclude_safety_cars: bool = False) -> pd.DataFrame:
+    """Apply feature engineering to a raw laps DataFrame (may span multiple seasons)."""
     # Basic filters
     if "LapTime" in df.columns:
         df = df[df["LapTime"].notna()].copy()
@@ -37,11 +28,11 @@ def main() -> None:
     else:
         raise ValueError("LapTime column not found")
 
-    # Drop deleted laps if column exists
+    # Drop deleted laps
     if "Deleted" in df.columns:
         df = df[df["Deleted"] == False]
 
-    # Add pit-lap and safety-car flags
+    # Pit-lap and safety-car flags
     is_pit_lap = pd.Series(False, index=df.index)
     for col in ["PitInTime", "PitOutTime"]:
         if col in df.columns:
@@ -54,12 +45,15 @@ def main() -> None:
     else:
         df["IsSafetyCar"] = False
 
-    # Race-level normalization target (median race pace on clean laps)
+    # Race-level normalization target: group by (Season, RoundNumber) to avoid
+    # cross-season contamination when multiple seasons are loaded together.
     base_mask = (~df["IsPitLap"]) & (~df["IsSafetyCar"])
     base_df = df[base_mask].copy()
-    if "RoundNumber" in base_df.columns and not base_df.empty:
-        race_median = base_df.groupby("RoundNumber")["LapTimeSeconds"].median()
-        df["RaceMedianLap"] = df["RoundNumber"].map(race_median)
+
+    group_keys = [k for k in ["Season", "RoundNumber"] if k in base_df.columns]
+    if group_keys and not base_df.empty:
+        race_median = base_df.groupby(group_keys)["LapTimeSeconds"].median()
+        df = df.join(race_median.rename("RaceMedianLap"), on=group_keys)
     else:
         df["RaceMedianLap"] = np.nan
 
@@ -67,12 +61,12 @@ def main() -> None:
     df["RaceMedianLap"] = df["RaceMedianLap"].fillna(overall_median)
     df["LapTimeDelta"] = df["LapTimeSeconds"] - df["RaceMedianLap"]
 
-    # Optionally remove safety car / VSC laps
-    if args.exclude_safety_cars:
+    if exclude_safety_cars:
         df = df[~df["IsSafetyCar"]]
 
     # Keep a clean, focused feature set
     keep_cols = [
+        "Season",
         "LapTimeSeconds",
         "LapNumber",
         "Stint",
@@ -97,17 +91,68 @@ def main() -> None:
     keep_cols = [c for c in keep_cols if c in df.columns]
     df = df[keep_cols].copy()
 
-    # Basic cleanup
     if "Compound" in df.columns:
         df["Compound"] = df["Compound"].astype(str).str.upper()
     if "TrackStatus" in df.columns:
         df["TrackStatus"] = df["TrackStatus"].astype(str)
 
     df = df.dropna(subset=["LapTimeSeconds"])
+    return df
 
-    out_path = out_root / f"features_{args.season}.parquet"
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Build clean feature dataset (single or multi-season)")
+    # Single season (original interface — unchanged)
+    parser.add_argument("--season", type=int, default=2024,
+                        help="Single season year (ignored if --seasons is given)")
+    # Multi-season (new)
+    parser.add_argument("--seasons", type=str, default=None,
+                        help="Comma-separated years, e.g. '2022,2023,2024'. Overrides --season.")
+    parser.add_argument("--raw-dir", type=str, default="data/raw")
+    parser.add_argument("--out-dir", type=str, default="data/features")
+    parser.add_argument("--exclude-safety-cars", action="store_true")
+    args = parser.parse_args()
+
+    raw_dir = Path(args.raw_dir)
+    out_root = Path(args.out_dir)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    # Resolve which seasons to load
+    if args.seasons:
+        season_list = [int(s.strip()) for s in args.seasons.split(",") if s.strip()]
+    else:
+        season_list = [args.season]
+
+    frames = []
+    for season in season_list:
+        raw_root = raw_dir / str(season)
+        if not raw_root.exists():
+            print(f"WARNING: Raw data directory not found for season {season}: {raw_root}. Skipping.")
+            continue
+        print(f"Loading season {season} from {raw_root} ...")
+        frame = load_all_parquets(raw_root, season)
+        print(f"  → {len(frame):,} raw laps loaded")
+        frames.append(frame)
+
+    if not frames:
+        raise RuntimeError("No seasons could be loaded. Check --raw-dir and --seasons arguments.")
+
+    df = pd.concat(frames, ignore_index=True)
+    print(f"Total raw laps across all seasons: {len(df):,}")
+
+    df = build_feature_df(df, exclude_safety_cars=args.exclude_safety_cars)
+    print(f"Total laps after feature engineering: {len(df):,}")
+
+    # Output path: single season → features_YYYY.parquet (original name),
+    # multi-season → features_YYYY_YYYY.parquet
+    if len(season_list) == 1:
+        out_name = f"features_{season_list[0]}.parquet"
+    else:
+        out_name = f"features_{min(season_list)}_{max(season_list)}.parquet"
+
+    out_path = out_root / out_name
     df.to_parquet(out_path, index=False)
-    print(f"Wrote {out_path}")
+    print(f"Wrote {out_path}  ({len(df):,} rows, {df['Season'].nunique()} season(s))")
 
 
 if __name__ == "__main__":

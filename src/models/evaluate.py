@@ -12,6 +12,7 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.inspection import permutation_importance
 
 
 def parse_rounds(spec: str) -> list[int]:
@@ -163,6 +164,18 @@ def main() -> None:
             df_pred["pred"] = preds
             df_pred["residual"] = df_pred["pred"] - df_pred[target]
             overall = metrics_for_split(df_pred[target], df_pred["pred"])
+            
+        if model_name == "hgb":
+            print(f"Computing permutation feature importance for {model_name}...")
+            # We evaluate importance against the target the model was trained on
+            importances = permutation_importance(model, X_test, test_df[target], n_repeats=5, random_state=42, n_jobs=-1)
+            fi_df = pd.DataFrame({
+                "feature": X_test.columns,
+                "importance": importances.importances_mean
+            }).sort_values("importance", ascending=False)
+            fi_df.to_csv(metrics_dir / f"feature_importance_{model_name}.csv", index=False)
+            print(f"Saved feature importance for {model_name}")
+
         group_results = {
             "compound": group_metrics(df_pred, "Compound") if "Compound" in df_pred.columns else None,
             "stint": group_metrics(df_pred, "Stint") if "Stint" in df_pred.columns else None,

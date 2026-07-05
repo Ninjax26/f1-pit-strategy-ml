@@ -221,6 +221,32 @@ def render_stint_gallery(results: pd.DataFrame, total_laps: int, top_n: int = 8)
         </div>""", unsafe_allow_html=True)
 
 
+def render_feature_importance(metrics_dir: Path):
+    """Render feature importance horizontal bar chart."""
+    import altair as alt
+    
+    fi_path = metrics_dir / "feature_importance_hgb.csv"
+    if not fi_path.exists():
+        return
+        
+    st.markdown("### 📈 Feature Importance")
+    
+    fi_df = pd.read_csv(fi_path)
+    top_fi = fi_df.sort_values("importance", ascending=False).head(15)
+    
+    chart = alt.Chart(top_fi).mark_bar(cornerRadiusEnd=4, color="#7eb8da").encode(
+        x=alt.X("importance:Q", title="Importance Score"),
+        y=alt.Y("feature:N", sort="-x", title="Feature"),
+        tooltip=["feature", alt.Tooltip("importance:Q", format=".4f")]
+    ).properties(height=400).configure_axis(
+        labelColor="#888", titleColor="#aaa", gridColor="#222"
+    ).configure_view(strokeWidth=0)
+    
+    st.altair_chart(chart, use_container_width=True)
+    
+    st.markdown('<div style="margin-top:0.5rem;color:#ccc;font-size:0.9rem;border-left:3px solid #7eb8da;padding-left:1rem;">Feature importance represents how much each input variable contributes to the model\'s predictions. Higher importance indicates a greater influence on predicted lap times.</div>', unsafe_allow_html=True)
+
+
 def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
     """Render Model Performance tab content."""
     import altair as alt
