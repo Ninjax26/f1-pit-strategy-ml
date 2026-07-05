@@ -134,6 +134,79 @@ def build_laps(base_laps, strategy):
     return laps
 
 
+def build_race_template(round_df: pd.DataFrame, selected_driver: str, total_laps: int) -> pd.DataFrame:
+    """Build a full-race template for the selected driver using the round's lap count."""
+    if round_df.empty:
+        return pd.DataFrame()
+
+    driver_rows = round_df[round_df.get("Driver", pd.Series([None] * len(round_df))) == selected_driver].copy()
+    if driver_rows.empty:
+        driver_rows = round_df.iloc[[0]].copy()
+        driver_rows.loc[:, "Driver"] = selected_driver
+
+    template = pd.DataFrame(index=range(total_laps))
+    for column in [
+        "Season",
+        "LapTimeSeconds",
+        "LapNumber",
+        "Stint",
+        "Compound",
+        "TyreLife",
+        "TrackStatus",
+        "Driver",
+        "Team",
+        "RoundNumber",
+        "EventName",
+        "AirTemp",
+        "TrackTemp",
+        "Humidity",
+        "WindSpeed",
+        "WindDirection",
+        "SessionName",
+        "IsPitLap",
+        "IsSafetyCar",
+        "RaceMedianLap",
+        "LapTimeDelta",
+    ]:
+        if column in round_df.columns:
+            if column in {"LapNumber", "Stint", "TyreLife", "RoundNumber", "Season"}:
+                template[column] = range(1, total_laps + 1) if column == "LapNumber" else template.index
+            else:
+                template[column] = driver_rows[column].iloc[0] if not driver_rows.empty else np.nan
+        elif column in driver_rows.columns:
+            template[column] = driver_rows[column].iloc[0] if not driver_rows.empty else np.nan
+
+    if "LapNumber" not in template.columns:
+        template["LapNumber"] = range(1, total_laps + 1)
+    if "Driver" not in template.columns:
+        template["Driver"] = selected_driver
+    if "RoundNumber" not in template.columns:
+        template["RoundNumber"] = round_df["RoundNumber"].iloc[0] if not round_df.empty else np.nan
+    if "EventName" not in template.columns:
+        template["EventName"] = round_df["EventName"].iloc[0] if not round_df.empty else np.nan
+    if "Compound" not in template.columns:
+        template["Compound"] = "MEDIUM"
+
+    template = template.copy()
+    template["LapNumber"] = np.arange(1, total_laps + 1)
+    template["Driver"] = selected_driver
+    template["RoundNumber"] = round_df["RoundNumber"].iloc[0] if not round_df.empty else np.nan
+    template["EventName"] = round_df["EventName"].iloc[0] if not round_df.empty else np.nan
+    template["Compound"] = template.get("Compound", "MEDIUM").fillna("MEDIUM")
+    if "Stint" in template.columns:
+        template["Stint"] = 1
+    if "TyreLife" in template.columns:
+        template["TyreLife"] = 1
+    if "LapTimeSeconds" in template.columns:
+        template["LapTimeSeconds"] = np.nan
+    if "LapTimeDelta" in template.columns:
+        template["LapTimeDelta"] = np.nan
+    if "RaceMedianLap" in template.columns:
+        race_median = round_df["RaceMedianLap"].dropna().iloc[0] if round_df["RaceMedianLap"].dropna().size else np.nan
+        template["RaceMedianLap"] = race_median
+    return template
+
+
 def _safe_float(value):
     if value is None:
         return None
@@ -439,7 +512,8 @@ with tab_simulator:
         st.error("No laps for that driver.")
         st.stop()
     race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
-    total_laps = int(race_df["LapNumber"].max())
+    total_laps = int(round_df["LapNumber"].dropna().max()) if "LapNumber" in round_df.columns else int(race_df["LapNumber"].max())
+    race_df = build_race_template(round_df, selected_driver, total_laps)
 
     min_stint_max = max(1, min(20, total_laps))
     min_stint_default = min(8, max(1, total_laps // (max_stops + 1)), min_stint_max)

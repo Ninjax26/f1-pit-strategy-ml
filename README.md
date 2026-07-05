@@ -119,6 +119,29 @@ _MAE and RMSE measure error relative to the true absolute lap time._
 
 In the Belgian GP case study, the simulator recommended a one-stop Medium → Hard strategy with a pit window comparable to the actual race strategy, demonstrating that the approach can generate realistic strategy recommendations under historical race conditions.
 
+## 📊 Generated Evaluation Plots
+
+The training and evaluation workflow produces static plots for model diagnostics and strategy analysis. These can be regenerated with:
+
+```bash
+python src/plots/make_plots.py --model hgb
+```
+
+![Predicted vs Actual](figures/pred_vs_actual_hgb.png)
+
+![Residual Distribution](figures/residuals_hgb.png)
+
+![MAE by Compound](figures/mae_by_compound_hgb.png)
+
+![MAE by Round](figures/mae_by_round_hgb.png)
+
+![MAE by Stint](figures/mae_by_stint_hgb.png)
+
+## ⚠️ Known Limitations
+
+- Wet-weather laps show much higher MAE than dry-weather laps. The model is much more reliable for dry-race strategy decisions than for wet-race calls without a dedicated wet-weather model.
+- Round 21 (Las Vegas) shows an MAE spike compared with the rest of the season, which is worth investigating for unusual track conditions, safety-car effects, or data-quality issues.
+
 ---
 
 ## 📚 What I Learned

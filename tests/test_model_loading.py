@@ -9,6 +9,8 @@ import pandas as pd
 import sklearn
 import pytest
 
+import app
+
 DATA_DIR = Path("data")
 FEATURES_DIR = DATA_DIR / "features"
 MODELS_DIR = DATA_DIR / "models"
@@ -67,6 +69,16 @@ class TestFeatureData:
 
 class TestMetricsData:
     """Metric files must exist and be parseable."""
+
+    def test_build_race_template_uses_round_lap_count_for_short_driver_data(self):
+        df = pd.read_parquet(FEATURES_DIR / "features_2024.parquet")
+        round_df = df[df["RoundNumber"] == 3].copy()
+        template = app.build_race_template(round_df, selected_driver="VER", total_laps=58)
+
+        assert len(template) == 58
+        assert template["LapNumber"].tolist() == list(range(1, 59))
+        assert template["Driver"].eq("VER").all()
+        assert template["RoundNumber"].nunique() == 1
 
     @pytest.mark.parametrize("name", ["hgb", "ridge"])
     def test_metrics_json(self, name):
