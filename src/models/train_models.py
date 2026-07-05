@@ -91,7 +91,7 @@ def train_and_eval(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train baseline and tree models")
+    parser = argparse.ArgumentParser(description="Train Ridge and HGB models")
     parser.add_argument("--season", type=int, default=2024)
     parser.add_argument("--features", type=str, default="data/features")
     parser.add_argument("--out-dir", type=str, default="data/models")

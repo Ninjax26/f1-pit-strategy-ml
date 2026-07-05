@@ -64,7 +64,7 @@ def build_feature_df(df: pd.DataFrame, exclude_safety_cars: bool = False) -> pd.
     if exclude_safety_cars:
         df = df[~df["IsSafetyCar"]]
 
-    # Keep a clean, focused feature set
+    # Select columns for modeling
     keep_cols = [
         "Season",
         "LapTimeSeconds",

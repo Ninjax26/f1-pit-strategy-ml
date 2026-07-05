@@ -35,7 +35,7 @@ To isolate the effects of data distribution shifts, we run three distinct experi
 ## Interpretation
 
 **1. Baseline vs. Primary Generalization (Same Era)**
-The model generalizes extremely well within the same regulation era. The HGB model achieved a Mean Absolute Error (MAE) of **1.335s** on the completely unseen 2025 season (trained on 2022-2024), which is actually slightly *better* than the 1.412s MAE achieved on the 2024 within-season test set. This confirms the model is successfully learning underlying physics (tire degradation profiles, track evolution, fuel burn) rather than memorizing specific races, as the combined three-year dataset provides a much richer set of training examples.
+The model generalizes well within the same regulation era. The HGB model achieved a Mean Absolute Error (MAE) of **1.335s** on the completely unseen 2025 season (trained on 2022-2024), which is actually slightly *better* than the 1.412s MAE achieved on the 2024 within-season test set. This confirms the model is successfully learning underlying physics (tire degradation profiles, track evolution, fuel burn) rather than memorizing specific races, as the combined three-year dataset provides a much richer set of training examples.
 
 **2. The Regulation-Shift Gap**
 As expected, the model degrades when predicting across a major regulation change. When trained strictly on 2021 data (13-inch tires, over-car aero) and tested on 2022 data (18-inch tires, ground-effect aero), the HGB model's MAE jumped to **2.131s** (a roughly +0.8s penalty compared to same-era generalization). 
@@ -43,4 +43,4 @@ While the model didn't fail completely—it still captures universal truths like
 
 ## Note on Unseen Tracks
 
-When predicting future seasons, the model inevitably encounters tracks it was never trained on. Our models handle categorical variables via `OneHotEncoder(handle_unknown="ignore")`. This means unseen tracks are gracefully assigned an all-zero encoding for track-specific features. The base predictions rely on track temperatures, tire compounds, and stint lengths rather than track memorization. The number of rows affected by unseen tracks is explicitly recorded in the results table above.
+When predicting future seasons, the model will encounter tracks it was never trained on. Our models handle categorical variables via `OneHotEncoder(handle_unknown="ignore")`. This means unseen tracks are gracefully assigned an all-zero encoding for track-specific features. The base predictions rely on track temperatures, tire compounds, and stint lengths rather than track memorization. The number of rows affected by unseen tracks is explicitly recorded in the results table above.

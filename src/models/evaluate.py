@@ -88,7 +88,7 @@ def rolling_splits(rounds: list[int], train_min: int, test_window: int, step: in
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate models and generate diagnostics")
+    parser = argparse.ArgumentParser(description="Evaluate models and produce metrics")
     parser.add_argument("--season", type=int, default=2024)
     parser.add_argument("--features", type=str, default="data/features")
     parser.add_argument("--models-dir", type=str, default="data/models")

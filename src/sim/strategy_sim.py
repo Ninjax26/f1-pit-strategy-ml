@@ -103,7 +103,7 @@ def _to_seconds(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
 
 
-def _robust_filter(losses: list[float]) -> list[float]:
+def _filter_losses(losses: list[float]) -> list[float]:
     losses = [x for x in losses if pd.notna(x) and x > 0]
     if len(losses) < 5:
         return losses
@@ -161,7 +161,7 @@ def estimate_pit_loss_from_raw(raw_df: pd.DataFrame) -> float | None:
         losses.extend(list(in_laps["LapTimeSeconds"] - base))
         losses.extend(list(out_laps["LapTimeSeconds"] - base))
 
-    losses = _robust_filter(losses)
+    losses = _filter_losses(losses)
     if not losses:
         return None
 

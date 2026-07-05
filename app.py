@@ -1,7 +1,5 @@
-"""
-F1 Pit Strategy Simulator — Lap-time ML + Monte Carlo strategy simulation.
-Enhanced UI with Dashboard, Strategy Simulator, and Model Performance tabs.
-"""
+"""F1 pit strategy simulator — ML lap-time prediction + Monte Carlo strategy eval."""
+
 import json
 from pathlib import Path
 
@@ -30,14 +28,11 @@ MODELS_DIR = DATA_DIR / "models"
 METRICS_DIR = DATA_DIR / "metrics"
 FIGURES_DIR = Path("figures")
 
-# ─── Page Config ───
-st.set_page_config(page_title="F1 Strategy Simulator", page_icon="🏎️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="F1 Strategy Simulator", layout="wide", initial_sidebar_state="expanded")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════
-#   SIMULATION ENGINE (unchanged logic)
-# ═══════════════════════════════════════
+# --- Simulation logic ---
 
 def parse_strategy(spec: str) -> list[tuple[str, int]]:
     stints = []
@@ -197,7 +192,12 @@ def load_features(season):
 @st.cache_resource(show_spinner=False)
 def load_model(model_name):
     path = MODELS_DIR / f"{model_name}_model.joblib"
-    return joblib.load(path) if path.exists() else None
+    if not path.exists():
+        return None
+    try:
+        return joblib.load(path)
+    except Exception:
+        return None
 
 
 @st.cache_data(show_spinner=False)
@@ -262,14 +262,11 @@ def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_
     return pd.DataFrame(results).sort_values(key)
 
 
-# ═══════════════════════════════════════
-#   UI LAYOUT
-# ═══════════════════════════════════════
+# --- UI ---
 
 render_hero()
 
-# --- Load data ---
-season = st.sidebar.number_input("🗓️ Season", value=2024, step=1, min_value=2018, max_value=2026)
+season = st.sidebar.number_input("Season", value=2024, step=1, min_value=2018, max_value=2026, key="season")
 features_df = load_features(int(season))
 if features_df is None:
     st.error(f"Missing features: {FEATURES_DIR / f'features_{season}.parquet'}")
@@ -277,21 +274,17 @@ if features_df is None:
 
 model_metrics = load_model_metrics(int(season))
 
-# --- Tabs ---
-tab_dashboard, tab_simulator, tab_model = st.tabs(["🏠 Dashboard", "🏎️ Strategy Simulator", "📊 Model Performance"])
+tab_dashboard, tab_simulator, tab_model = st.tabs(["Dashboard", "Strategy Simulator", "Model Performance"])
 
-# ═══════════════════════════════════════
-#   TAB 1: DASHBOARD
-# ═══════════════════════════════════════
 with tab_dashboard:
-    st.markdown("### 🏁 Project Overview")
+    st.markdown("### Project Overview")
     st.markdown("""
     <div class="glass-card">
         <p style="color:#ccc;font-size:1rem;line-height:1.7;margin:0;">
-            This project uses <strong style="color:#e10600;">machine learning</strong> to predict Formula 1 lap times, then runs
-            <strong style="color:#e10600;">Monte Carlo simulations</strong> to find the optimal pit stop strategy for any driver at any race.
-            The model considers tire compound, tire age, weather conditions, and track-specific factors to predict how fast each lap will be
-            under different strategy scenarios — then simulates thousands of race variations to account for real-world uncertainty.
+            This project uses machine learning to predict Formula 1 lap times, then runs
+            Monte Carlo simulations to find optimal pit stop strategies.
+            The model uses tire compound, tire age, weather, and track data to predict lap times
+            across different strategy scenarios.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -299,8 +292,7 @@ with tab_dashboard:
     render_how_it_works()
     st.markdown("---")
 
-    # Animated telemetry dashboard
-    st.markdown("### 📡 Live Telemetry Preview")
+    st.markdown("### Live Telemetry Preview")
     render_live_telemetry(height=220)
     st.markdown("---")
 
@@ -311,47 +303,43 @@ with tab_dashboard:
     render_season_stats(features_df)
 
     st.markdown("---")
-    st.markdown("### 🎯 Key Technical Highlights")
+    st.markdown("### Key Features")
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown("""
         <div class="glass-card">
-            <h3>🔬 Feature Engineering</h3>
+            <h3>Feature Engineering</h3>
             <p style="color:#999;font-size:0.85rem;line-height:1.6;">
-                20+ features including tire degradation curves, weather interpolation, safety car flags, and race-normalized lap deltas.
+                20+ features including tire degradation curves, weather interpolation, safety car flags, and normalized lap deltas.
             </p>
         </div>""", unsafe_allow_html=True)
     with c2:
         st.markdown("""
         <div class="glass-card">
-            <h3>📐 Time-Based CV</h3>
+            <h3>Time-Based CV</h3>
             <p style="color:#999;font-size:0.85rem;line-height:1.6;">
-                Rolling train/test splits mimic real deployment — model is always tested on future races it hasn't seen.
+                Rolling train/test splits — the model is always tested on future races it has not seen during training.
             </p>
         </div>""", unsafe_allow_html=True)
     with c3:
         st.markdown("""
         <div class="glass-card">
-            <h3>🎲 Monte Carlo Engine</h3>
+            <h3>Monte Carlo Engine</h3>
             <p style="color:#999;font-size:0.85rem;line-height:1.6;">
-                Up to 2000 simulations per strategy with residual-based noise and race-specific pit loss distributions.
+                Up to 2000 simulations per strategy with residual-based noise and race-specific pit loss sampling.
             </p>
         </div>""", unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════
-#   TAB 2: STRATEGY SIMULATOR
-# ═══════════════════════════════════════
 with tab_simulator:
-    # Sidebar controls
     rounds = sorted(features_df["RoundNumber"].dropna().unique().astype(int))
     if not rounds:
         st.error("No rounds in features.")
         st.stop()
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🏎️ Race Setup")
-    selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1)
+    st.sidebar.markdown("### Race Setup")
+    selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1, key="round")
     round_df = features_df[features_df["RoundNumber"] == selected_round].copy()
     if round_df.empty:
         st.error("No data for selected round.")
@@ -360,35 +348,43 @@ with tab_simulator:
     event_name = round_df["EventName"].iloc[0] if "EventName" in round_df.columns else f"Round {selected_round}"
     st.sidebar.markdown(f"""
     <div class="sidebar-info">
-        <span class="si-icon">📍</span>
+        <span class="si-icon" style="color:#e10600;">&#9654;</span>
         <span class="si-text"><strong>{event_name}</strong></span>
     </div>
     """, unsafe_allow_html=True)
 
     available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
     default_driver_idx = available_drivers.index("VER") if "VER" in available_drivers else 0
-    selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=default_driver_idx)
+    selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=default_driver_idx, key="driver")
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🤖 Model")
-    model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0)
+    st.sidebar.markdown("### Model")
+    model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0, key="model")
     model = load_model(model_name)
     if model is None:
-        st.error(f"Missing model: {MODELS_DIR / f'{model_name}_model.joblib'}")
+        import sklearn
+        model_path = MODELS_DIR / f"{model_name}_model.joblib"
+        if model_path.exists():
+            st.error(
+                f"Model file exists but cannot be loaded. Likely a scikit-learn version mismatch "
+                f"(installed: `{sklearn.__version__}`). "
+                f"Reinstall dependencies with `pip install -r requirements.txt` or retrain the model."
+            )
+        else:
+            st.error(f"Missing model: {model_path}")
         st.stop()
 
     if model_metrics and model_name in model_metrics:
         m = model_metrics[model_name]
         st.sidebar.markdown(f"""
         <div class="sidebar-info">
-            <span class="si-icon">📊</span>
-            <span class="si-text">MAE: <span class="si-value">{m.get('mae', 0):.2f}s</span> · RMSE: <span class="si-value">{m.get('rmse', 0):.2f}s</span></span>
+            <span class="si-text">MAE: <span class="si-value">{m.get('mae', 0):.2f}s</span>  RMSE: <span class="si-value">{m.get('rmse', 0):.2f}s</span></span>
         </div>
         """, unsafe_allow_html=True)
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚙️ Strategy Parameters")
-    max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1)
+    st.sidebar.markdown("### Strategy Parameters")
+    max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1, key="max_stops")
     metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
     pit_loss_stats = load_pit_loss(metrics_path, int(selected_round)) or _fixed_pit_loss_stats(20.0)
 
@@ -401,13 +397,13 @@ with tab_simulator:
 
     min_stint_max = max(1, min(20, total_laps))
     min_stint_default = min(8, max(1, total_laps // (max_stops + 1)), min_stint_max)
-    min_stint = st.sidebar.slider("Min Stint Length", 1, min_stint_max, min_stint_default)
+    min_stint = st.sidebar.slider("Min Stint Length", 1, min_stint_max, min_stint_default, key="min_stint")
     max_stint_min = max(1, min_stint)
     max_stint_max = max(max_stint_min, min(50, total_laps))
-    max_stint = st.sidebar.slider("Max Stint Length", max_stint_min, max_stint_max, min(35, max_stint_max))
-    stint_step = st.sidebar.slider("Stint Step", 1, 5, 2)
-    include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False)
-    allow_single = st.sidebar.checkbox("Allow Single Compound", value=False)
+    max_stint = st.sidebar.slider("Max Stint Length", max_stint_min, max_stint_max, min(35, max_stint_max), key="max_stint")
+    stint_step = st.sidebar.slider("Stint Step", 1, 5, 2, key="stint_step")
+    include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False, key="include_wet")
+    allow_single = st.sidebar.checkbox("Allow Single Compound", value=False, key="allow_single")
 
     max_feasible_stops = max(0, total_laps // max(min_stint, 1) - 1)
     effective_max_stops = min(max_stops, max_feasible_stops)
@@ -415,17 +411,16 @@ with tab_simulator:
         st.sidebar.warning(f"Max Stops reduced to {effective_max_stops}.")
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🎲 Simulation")
-    n_sims = st.sidebar.slider("Simulations", 1, 2000, 200, step=50)
-    seed = st.sidebar.number_input("Random Seed", value=42, step=1)
-    pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0)
-    noise_sigma = st.sidebar.slider("Gaussian Noise σ", 0.0, 5.0, 0.0, step=0.1)
-    use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True)
+    st.sidebar.markdown("### Simulation")
+    n_sims = st.sidebar.slider("Simulations", 1, 2000, 200, step=50, key="n_sims")
+    seed = st.sidebar.number_input("Random Seed", value=42, step=1, key="seed")
+    pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0, key="pit_loss_mode")
+    noise_sigma = st.sidebar.slider("Noise Sigma", 0.0, 5.0, 0.0, step=0.1, key="noise_sigma")
+    use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True, key="use_residuals")
     residuals = load_residuals_cached(model_name) if use_residuals else None
-    custom_strategy = st.sidebar.text_input("Custom Strategy", value="", placeholder="SOFT:18,MEDIUM:22,HARD:20")
+    custom_strategy = st.sidebar.text_input("Custom Strategy", value="", placeholder="SOFT:18,MEDIUM:22,HARD:20", key="custom_strategy")
 
-    # Race info header
-    st.markdown(f"### 🏁 {event_name} — {selected_driver}")
+    st.markdown(f"### {event_name} — {selected_driver}")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric("Total Laps", int(total_laps))
@@ -436,10 +431,10 @@ with tab_simulator:
     with c4:
         st.metric("Simulations", n_sims)
 
-    run = st.button("▶ Run Simulation", type="primary", use_container_width=True)
+    run = st.button("Run Simulation", type="primary", width='stretch')
 
     if run:
-        with st.spinner("🏎️ Running Monte Carlo simulation…"):
+        with st.spinner("Running Monte Carlo simulation..."):
             try:
                 if custom_strategy.strip():
                     strategies = {"custom": parse_strategy(custom_strategy.strip())}
@@ -462,24 +457,20 @@ with tab_simulator:
                     seed=int(seed) if seed is not None else None,
                 )
 
-                st.success(f"✅ Simulated **{len(results)}** strategies × **{n_sims}** runs each")
+                st.success(f"Simulated {len(results)} strategies x {n_sims} runs each")
 
-                # Best strategy hero
                 best = results.iloc[0]
                 render_best_strategy(best, n_sims, total_laps)
 
-                # Insights
                 insights = generate_insights(results, n_sims)
                 render_insights(insights)
 
-                # Strategy visual breakdown
                 st.markdown("---")
                 render_stint_gallery(results, total_laps, top_n=8)
 
-                # Comparison chart
                 if alt and len(results) > 1:
                     st.markdown("---")
-                    st.markdown("#### 📊 Strategy Comparison")
+                    st.markdown("#### Strategy Comparison")
                     is_mc = n_sims > 1
                     chart_df = results.head(12).copy()
                     time_key = "total_time_mean_s" if is_mc else "total_time_s"
@@ -492,7 +483,7 @@ with tab_simulator:
                     bars = base.mark_bar(cornerRadiusEnd=6, color="#e10600", height=16).encode(
                         x=alt.X("delta:Q", title="Time delta to best strategy (seconds)"),
                         tooltip=["strategy", alt.Tooltip(f"{time_key}:Q", title="Total Time", format=".1f"),
-                                 alt.Tooltip("delta:Q", title="Δ to best", format=".1f"), "stops"],
+                                 alt.Tooltip("delta:Q", title="Delta to best", format=".1f"), "stops"],
                     )
                     if is_mc and "total_time_p10_s" in chart_df.columns:
                         chart_df["err_low"] = chart_df["total_time_p10_s"] - best_time
@@ -507,34 +498,29 @@ with tab_simulator:
                     chart = chart.properties(height=max(250, len(chart_df) * 35)).configure_axis(
                         labelColor="#888", titleColor="#aaa", gridColor="#1a1a1a"
                     ).configure_view(strokeWidth=0)
-                    st.altair_chart(chart, use_container_width=True)
+                    st.altair_chart(chart, width='stretch')
 
-                # Results table
                 st.markdown("---")
-                st.markdown("#### 📋 Full Rankings")
+                st.markdown("#### Full Rankings")
                 render_strategy_table(results, n_sims, total_laps)
 
                 st.download_button(
-                    "📥 Download Results CSV", results.to_csv(index=False).encode("utf-8"),
+                    "Download Results CSV", results.to_csv(index=False).encode("utf-8"),
                     file_name="strategy_results.csv", mime="text/csv",
                 )
             except Exception as e:
                 st.error(f"Simulation failed: {e}")
                 st.exception(e)
     else:
-        # Animated telemetry as pre-run visual
         render_live_telemetry(height=200)
         st.markdown("""
         <div class="glass-card" style="text-align:center;padding:2rem;">
             <p style="color:#bbb;font-size:1.1rem;">Select your race, driver, and parameters in the sidebar<br>then click <strong style="color:#e10600;">Run Simulation</strong> to find the optimal pit strategy.</p>
         </div>
         """, unsafe_allow_html=True)
-        st.caption("💡 Tip: Use residual noise with ≥200 sims for realistic uncertainty bands.")
+        st.caption("Tip: Use residual noise with 200+ sims for realistic uncertainty bands.")
 
 
-# ═══════════════════════════════════════
-#   TAB 3: MODEL PERFORMANCE
-# ═══════════════════════════════════════
 with tab_model:
     render_feature_importance(METRICS_DIR)
     st.markdown("---")
