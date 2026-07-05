@@ -1,115 +1,135 @@
-# 🏎️ F1 Pit Strategy ML + Simulation
+# 🏎️ F1 Race Strategy Decision Support System
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-name.streamlit.app)
+> **Lap-time prediction + Monte Carlo strategy optimization for Formula 1 — built on real 2024 race data.**
 
-Lap-time prediction + **Monte Carlo pit strategy simulation** for F1 2024, wrapped in a sleek, F1-themed interactive dashboard powered by **Three.js** animations.
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-orange?logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+This project is an interactive decision-support application that helps evaluate Formula 1 pit-stop strategies using historical race telemetry, machine learning, and Monte Carlo simulation. Users can compare multiple strategies, estimate total race time, and analyze uncertainty through an interactive Streamlit dashboard.
+
+---
+
+## 📸 Screenshots
+
+![Dashboard](docs/assets/dashboard.png)
+![Simulator](docs/assets/simulator.png)
+![Model Performance](docs/assets/model_performance.png)
+
+---
+
+## ❓ Problem Statement
+
+A Formula 1 race strategy engineer must decide:
+
+- **When** to pit (which lap)
+- **Which tyre compound** to fit next (Soft / Medium / Hard)
+- **How many stops** to make in total
+
+Getting this wrong costs seconds — sometimes entire race positions. The challenge is that the right answer depends on dozens of factors at once: how quickly a particular tyre degrades over a stint, the ambient and track temperature on race day, how long a pit stop costs at a specific circuit, and how all of these factors interact across 40–70 laps.
+
+**Data helps** because historical lap times encode tyre degradation curves, track-specific pace differentials between compounds, and pit-stop time costs. A model trained on this data can predict how fast each lap will be under any hypothetical strategy — far faster than a human can reason through every combination by hand.
+
+---
+
+## 💡 Why this project?
+
+Modern Formula 1 strategy decisions depend on balancing tyre degradation, weather, pit-stop costs, and race conditions. Evaluating every possible combination manually is impractical. This project demonstrates how machine learning and simulation can support engineers by narrowing down promising strategies quickly while providing confidence estimates rather than single predictions.
 
 ---
 
 ## ✨ Features
 
-### 🧠 Machine Learning
-- **Dual ML models** — Ridge Regression & HistGradientBoosting (HGB) trained on `LapTimeDelta`
-- **20+ engineered features** — tire degradation curves, weather interpolation, safety car flags, race-normalised lap deltas
-- **Time-based cross-validation** — rolling train/test splits that mimic real deployment (always tested on unseen future races)
-
-### 🎲 Strategy Simulator
-- **Monte Carlo engine** — up to 2 000 simulations per strategy with residual-based noise
-- **1-stop & 2-stop strategies** with compound rules, customisable stint lengths, and optional wet compounds
-- **Race-specific pit loss** distributions (median, mean, std, P10/P90)
-- **Custom strategy input** — test any stint plan (e.g. `SOFT:18,MEDIUM:22,HARD:20`)
-
-### 🎨 Interactive UI
-- **Three.js particle hero** — animated speed-trail background with F1 branding
-- **Live telemetry dashboard** — animated gauges and scrolling race data strip
-- **Simulation loader** — racing-particle spinner while Monte Carlo runs
-- **Tire compound visualiser** — animated sidebar tire icon per compound
-- **Glassmorphism cards, Orbitron typography, micro-animations** throughout the app
-- **Three-tab layout** — Dashboard · Strategy Simulator · Model Performance
-
----
-
-## 📊 Results (2024 test rounds 17–24)
-
-| Model | MAE | RMSE |
-|-------|-----|------|
-| HGB   | **1.49 s** | 2.30 s |
-| Ridge | 3.74 s | 4.91 s |
-
----
-
-## 🚀 Quick Start
-
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Launch the app
-streamlit run app.py
-```
-
-Select a **season → round → driver**, configure strategy parameters in the sidebar, and click **▶ Run Simulation** to see top strategies and the best option.
-
----
-
-## 📁 Data & Model Pipeline (run once)
-
-```bash
-python src/data/pull_2024_races.py --cache-dir cache
-python src/features/build_features.py
-python src/models/train_models.py --train-rounds 1-16 --test-rounds 17-24
-python src/sim/compute_pit_loss.py
-python src/models/evaluate.py --rolling
-streamlit run app.py
-```
-
----
-
-## 📂 Project Structure
-
-```
-f1/
-├── app.py                  # Main Streamlit app — tabs, sidebar, simulation engine
-├── three_components.py     # Three.js-powered components (hero, telemetry, loader, tire viz, gauge)
-├── ui_helpers.py           # UI rendering functions (hero, cards, tables, insights, charts)
-├── ui_styles.py            # Full CSS design system (glassmorphism, sidebar, animations)
-├── requirements.txt        # Python dependencies
-├── data/
-│   ├── features/           # Engineered feature parquets per season
-│   ├── models/             # Trained model .joblib files (HGB, Ridge)
-│   └── metrics/            # Model metrics, pit-loss CSVs, residual parquets
-├── figures/                # Pre-generated evaluation plots (residuals, rolling MAE, etc.)
-├── src/
-│   ├── data/               # Data pulling & cleaning scripts
-│   ├── features/           # Feature engineering pipeline
-│   ├── models/             # Training & evaluation scripts
-│   └── sim/                # Pit-loss computation
-├── notebooks/              # Exploratory analysis
-└── reports/                # Generated analysis reports
-```
+| Category | Feature |
+|---|---|
+| 🎮 **Interactive Strategy Simulator** | Compare strategies, view confidence intervals, and explore optimal pit windows |
+| 📊 **Race Dashboard** | View live telemetry, model metrics, and season-at-a-glance stats |
+| ✏️ **Custom Strategy Input** | Test any user-defined pit plan (e.g. `SOFT:18,MEDIUM:22,HARD:20`) |
+| 🎲 **Monte Carlo Simulation** | Up to 2,000 simulations per strategy with residual-based lap noise and pit loss sampling. [Read more](docs/MONTE_CARLO.md) |
+| 🧠 **Machine Learning Prediction** | Dual-model training (Ridge + HistGradientBoosting) with rolling train/test splits. [Read more](docs/ML_PIPELINE.md) |
+| 🔬 **Feature Engineering** | Race-normalised lap delta target, safety-car flags, pit-lap flags, and weather features |
+| 📥 **CSV Export** | Download Monte Carlo simulation results as CSV |
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| ML Models | scikit-learn (Ridge, HistGradientBoosting) |
-| Data | FastF1, pandas, NumPy, PyArrow |
-| Visualisation | Streamlit, Altair, Matplotlib, Seaborn |
-| UI Animations | Three.js (via Streamlit HTML components) |
-| Styling | Custom CSS (Orbitron + Inter fonts, glassmorphism) |
+| Category | Technology |
+|---|---|
+| **Programming** | Python |
+| **UI** | Streamlit, Custom CSS (glassmorphism), HTML5 Canvas Animations |
+| **Machine Learning** | Scikit-learn (`Ridge`, `HistGradientBoostingRegressor`) |
+| **Data Processing** | Pandas, NumPy |
+| **Visualization** | Altair, Matplotlib, Seaborn |
+| **Utilities** | Joblib, FastF1, PyArrow |
 
 ---
 
-## 🌐 Deploy (Streamlit Cloud)
+## 📐 Design Decisions
 
-1. Push repo to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io) → connect repo → main file: `app.py`
-3. Deploy (app uses `data/` committed in the repo)
+| Decision | Reason |
+|---|---|
+| **HistGradientBoosting** | Better performance on nonlinear tabular data compared to standard regressors |
+| **Ridge Regression** | Baseline for comparison |
+| **Monte Carlo** | Model uncertainty instead of single predictions |
+| **Streamlit** | Rapid interactive prototyping and deployment |
+| **Parquet** | Faster loading and smaller storage than CSV |
+
+---
+
+## 🚀 Quick Start
+
+For detailed project structure and advanced usage, see the [Project Structure Docs](docs/PROJECT_STRUCTURE.md).
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/<your-username>/f1-pit-strategy-ml.git
+cd f1-pit-strategy-ml
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Launch the app (pre-built data included)
+streamlit run app.py
+```
+
+---
+
+## 📈 Results
+
+Models are trained on **Rounds 1–16** (Bahrain → Italy) and evaluated on **Rounds 17–24** (Azerbaijan → Abu Dhabi) — races the model has never seen during training.
+
+### Overall Performance
+
+| Model | MAE (s) | RMSE (s) |
+|---|---|---|
+| **HGB (HistGradientBoosting)** | **1.49** | **2.30** |
+| Ridge Regression | 3.74 | 4.91 |
+
+_MAE and RMSE measure error relative to the true absolute lap time._
+
+### Case Study — Max Verstappen, Round 14 (Belgian GP)
+
+In the Belgian GP case study, the simulator recommended a one-stop Medium → Hard strategy with a pit window comparable to the actual race strategy, demonstrating that the approach can generate realistic strategy recommendations under historical race conditions.
+
+---
+
+## 📚 What I Learned
+
+- Designing maintainable Streamlit applications
+- Building reproducible ML pipelines
+- Separating UI from business logic
+- Feature engineering for time-series datasets
+- Simulating uncertainty using Monte Carlo methods
+- Organizing reusable Python modules
 
 ---
 
 ## 📜 License
 
-See [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
