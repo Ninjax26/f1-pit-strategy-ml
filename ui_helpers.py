@@ -29,35 +29,39 @@ def render_hero():
 
 
 def render_how_it_works():
-    st.markdown("### How It Works")
-    cols = st.columns([2, 1, 2, 1, 2])
+    st.markdown("### Workflow")
     steps = [
-        ("Data Collection", "Race telemetry from all 2024 F1 races — lap times, tire compounds, weather, track conditions"),
-        ("ML Prediction", "Gradient Boosting model predicts lap times based on tire age, compound, weather and track factors"),
-        ("Strategy Sim", "Monte Carlo simulation tests thousands of pit strategies to find the optimal tire and pit window"),
+        ("Historical Race Data", "Raw lap times, tire compounds, weather, and track state from a selected race weekend."),
+        ("Feature Engineering", "The pipeline builds lap-level features such as tyre age, track status, and race-normalized targets."),
+        ("Machine Learning Model", "A trained regressor predicts lap-by-lap race pace for candidate strategies."),
+        ("Monte Carlo Simulation", "The app perturbs those predictions to reflect uncertainty and pit-stop variability."),
+        ("Strategy Evaluation", "Each candidate strategy is ranked by expected race time and uncertainty band."),
+        ("Recommended Pit Strategy", "The best-ranked strategy is shown with its pit window and confidence range."),
     ]
-    for i in range(3):
-        with cols[i * 2]:
+    cols = st.columns(len(steps))
+    for col, (title, desc) in zip(cols, steps):
+        with col:
             st.markdown(f"""
-            <div class="flow-step">
-                <div class="flow-title">{['DATA', 'ML', 'STRATEGY'][i]}</div>
-                <div class="flow-desc">{steps[i][1]}</div>
+            <div class="glass-card" style="min-height:180px;">
+                <div style="color:#e10600;font-size:0.8rem;font-weight:700;letter-spacing:0.2rem;text-transform:uppercase;">{title}</div>
+                <div style="color:#ccc;font-size:0.92rem;line-height:1.5;margin-top:0.5rem;">{desc}</div>
             </div>""", unsafe_allow_html=True)
-        if i < 2:
-            with cols[i * 2 + 1]:
-                st.markdown(f'<div class="flow-arrow">→</div>', unsafe_allow_html=True)
 
 
 def render_model_comparison(metrics: dict):
-    st.markdown("### Model Performance Comparison")
+    st.markdown("### Model Comparison")
     col1, col2 = st.columns(2)
-    for col, (name, label) in zip([col1, col2], [("hgb", "HGB (Gradient Boosting)"), ("ridge", "Ridge Regression")]):
+    model_specs = [
+        ("hgb", "HGB (Gradient Boosting)", "Best default choice for this project because it captures nonlinear tyre-degradation patterns better than a linear baseline.", "Slightly less transparent and can be more sensitive to the feature set and training window.", "Best default"),
+        ("ridge", "Ridge Regression", "Fast, stable, and interpretable as a baseline comparator.", "Less flexible for nonlinear pace changes and usually trails HGB on this task.", "Baseline comparator"),
+    ]
+    for col, (name, label, strength, weakness, default_note) in zip([col1, col2], model_specs):
         m = metrics.get(name, {})
         with col:
             st.markdown(f"""
             <div class="glass-card">
                 <h3 style="margin:0 0 0.8rem 0!important;font-size:1rem!important;">{label}</h3>
-                <div style="display:flex;gap:1.5rem;">
+                <div style="display:flex;gap:1rem;">
                     <div class="metric-card" style="flex:1;">
                         <div class="metric-label">MAE</div>
                         <div class="metric-value">{m.get('mae', 0):.2f}<span class="metric-unit">s</span></div>
@@ -67,25 +71,47 @@ def render_model_comparison(metrics: dict):
                         <div class="metric-value">{m.get('rmse', 0):.2f}<span class="metric-unit">s</span></div>
                     </div>
                 </div>
+                <ul style="color:#bdbdbd;font-size:0.9rem;line-height:1.6;margin:0.9rem 0 0 1rem;padding:0;">
+                    <li><strong>Strength:</strong> {strength}</li>
+                    <li><strong>Weakness:</strong> {weakness}</li>
+                    <li><strong>Why it matters:</strong> {default_note}</li>
+                </ul>
             </div>""", unsafe_allow_html=True)
 
 
-def render_season_stats(features_df: pd.DataFrame):
-    st.markdown("### Season at a Glance")
+def render_season_stats(features_df: pd.DataFrame, model_metrics: dict | None, season: int, metrics_dir: Path):
+    st.markdown("### Key Statistics")
     n_races = features_df["RoundNumber"].nunique()
     n_drivers = features_df["Driver"].nunique()
-    n_teams = features_df["Team"].nunique()
     n_laps = len(features_df)
-    cols = st.columns(4)
-    labels = ["RACES", "DRIVERS", "TEAMS", "TOTAL LAPS"]
-    values = [n_races, n_drivers, n_teams, f"{n_laps:,}"]
-    for col, label, value in zip(cols, labels, values):
+    model_count = len(model_metrics) if isinstance(model_metrics, dict) else 0
+    best_mae = None
+    if isinstance(model_metrics, dict):
+        best_mae = min((m.get("mae") for m in model_metrics.values() if isinstance(m, dict) and m.get("mae") is not None), default=None)
+    pit_loss_path = metrics_dir / f"pit_loss_{season}.csv"
+    avg_pit_loss = None
+    if pit_loss_path.exists():
+        pit_loss_df = pd.read_csv(pit_loss_path)
+        median_losses = [pd.to_numeric(v, errors="coerce") for v in pit_loss_df.get("pit_loss_median", []) if pd.notna(pd.to_numeric(v, errors="coerce"))]
+        if median_losses:
+            avg_pit_loss = float(np.mean(median_losses))
+    cols = st.columns(3)
+    stat_items = [
+        ("Total Races", n_races, "Race weekends in the loaded feature set"),
+        ("Drivers", n_drivers, "Unique drivers represented in the data"),
+        ("Total Laps", f"{n_laps:,}", "Lap rows available for modeling and simulation"),
+    ]
+    for col, (label, value, helper_text) in zip(cols, stat_items):
         with col:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">{label}</div>
-                <div class="metric-value">{value}</div>
-            </div>""", unsafe_allow_html=True)
+            st.metric(label, value, help=helper_text)
+    cols2 = st.columns(3)
+    for col, (label, value, helper_text) in zip(cols2, [
+        ("Models Available", model_count, "Model artifacts available for the selected season"),
+        ("Best MAE", f"{best_mae:.2f}s" if best_mae is not None else "N/A", "Lowest MAE among the available model metrics"),
+        ("Average Pit Loss", f"{avg_pit_loss:.1f}s" if avg_pit_loss is not None else "N/A", "Average median pit-loss estimate from the pit-loss dataset"),
+    ]):
+        with col:
+            st.metric(label, value, help=helper_text)
 
 
 def render_stint_bar(stints: list, total_laps: int) -> str:
@@ -182,7 +208,59 @@ def render_strategy_table(results: pd.DataFrame, n_sims: int, total_laps: int):
         display["Delta"] = display["Delta to Best"].apply(lambda x: f"+{x:.1f}s" if x > 0 else "—")
         show_cols = ["Rank", "strategy", "stops", "Total Time", "Delta"]
 
-    st.dataframe(display[show_cols], width='stretch', hide_index=True)
+    def highlight_best(row):
+        if row.name == 0:
+            return ["font-weight: bold; background-color: rgba(225, 6, 0, 0.18); color: white;"] * len(row)
+        return [""] * len(row)
+
+    styled = display[show_cols].style.apply(highlight_best, axis=1)
+    st.dataframe(styled, width='stretch', hide_index=True)
+
+
+def render_recommendation_explanation(best_row, results: pd.DataFrame, n_sims: int):
+    is_mc = n_sims > 1
+    time_key = "total_time_mean_s" if is_mc else "total_time_s"
+    if results.empty:
+        return
+
+    best_time = best_row[time_key]
+    second_time = results.iloc[1][time_key] if len(results) > 1 else None
+    spread = None
+    if second_time is not None:
+        spread = second_time - best_time
+    p10 = best_row.get("total_time_p10_s")
+    p90 = best_row.get("total_time_p90_s")
+    uncertainty_spread = None
+    if p10 is not None and p90 is not None:
+        uncertainty_spread = p90 - p10
+
+    bullets = []
+    bullets.append(f"This strategy has the lowest {'expected race time' if is_mc else 'predicted race time'} among the evaluated options.")
+    bullets.append(f"It uses {best_row['stops']} stop{'s' if best_row['stops'] != 1 else ''}, which keeps the pit-loss overhead in line with the other candidates.")
+    if second_time is not None and spread is not None:
+        bullets.append(f"It beats the next-best option by {spread:.1f}s, so it remains ahead even after accounting for the ranking gap.")
+    if uncertainty_spread is not None:
+        if uncertainty_spread <= 8:
+            bullets.append("Its P10–P90 range is tight, so the recommendation is stable across most simulations.")
+        elif uncertainty_spread <= 20:
+            bullets.append("Its P10–P90 range is moderate, so the recommendation is reasonably stable but still sensitive to variability.")
+        else:
+            bullets.append("Its P10–P90 range is wider, so the recommendation is more sensitive to simulation noise and uncertainty.")
+    if is_mc and "pit_loss_mean_s" in best_row.index:
+        bullets.append(f"The simulation includes pit-loss variability with an average pit-loss contribution of {best_row['pit_loss_mean_s']:.1f}s.")
+
+    st.markdown("#### Why was this strategy recommended?")
+    st.markdown("<ul style='color:#d0d0d0;line-height:1.7;margin-top:0.4rem;'>" + "".join(f"<li>{b}</li>" for b in bullets[:6]) + "</ul>", unsafe_allow_html=True)
+
+    if uncertainty_spread is not None or second_time is not None:
+        st.markdown("#### How confident is this recommendation?")
+        if uncertainty_spread is not None and uncertainty_spread <= 8 and second_time is not None and spread is not None and spread >= 5:
+            confidence = "High confidence — most simulations produced similar race times and the recommended strategy stayed clearly ahead of the next-best option."
+        elif uncertainty_spread is not None and uncertainty_spread <= 20 and second_time is not None and spread is not None and spread >= 2:
+            confidence = "Medium confidence — the race-time range is moderate and several strategies remained close together."
+        else:
+            confidence = "Low confidence — there is meaningful spread across the simulations and the ranking is still sensitive to noise."
+        st.markdown(f"<div style='color:#ccc;padding:0.8rem 1rem;border-left:3px solid #7eb8da;background:rgba(126,184,218,0.08);'> {confidence}</div>", unsafe_allow_html=True)
 
 
 def render_stint_gallery(results: pd.DataFrame, total_laps: int, top_n: int = 8):

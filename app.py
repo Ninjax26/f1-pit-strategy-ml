@@ -18,7 +18,7 @@ from ui_helpers import (
     format_race_time, render_hero, render_how_it_works, render_model_comparison,
     render_season_stats, render_best_strategy, generate_insights, render_insights,
     render_strategy_table, render_stint_gallery, render_model_performance_tab,
-    render_feature_importance,
+    render_feature_importance, render_recommendation_explanation,
 )
 from three_components import render_live_telemetry, render_simulation_loader
 
@@ -385,7 +385,15 @@ def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_
 
 render_hero()
 
-season = st.sidebar.number_input("Season", value=2024, step=1, min_value=2018, max_value=2026, key="season")
+season = st.sidebar.number_input(
+    "Season",
+    value=2024,
+    step=1,
+    min_value=2018,
+    max_value=2026,
+    key="season",
+    help="Choose the season to load. This changes which historical feature set and model metrics are available in the app.",
+)
 features_df = load_features(int(season))
 if features_df is None:
     st.error(f"Missing features: {FEATURES_DIR / f'features_{season}.parquet'}")
@@ -400,10 +408,8 @@ with tab_dashboard:
     st.markdown("""
     <div class="glass-card">
         <p style="color:#ccc;font-size:1rem;line-height:1.7;margin:0;">
-            This project uses machine learning to predict Formula 1 lap times, then runs
-            Monte Carlo simulations to find optimal pit stop strategies.
-            The model uses tire compound, tire age, weather, and track data to predict lap times
-            across different strategy scenarios.
+            This application helps Formula 1 strategy teams compare pit-stop options using historical race data and machine learning.
+            It predicts lap-by-lap pace, simulates race uncertainty, and ranks candidate strategies so users can reason about the fastest path to the flag.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -411,43 +417,34 @@ with tab_dashboard:
     render_how_it_works()
     st.markdown("---")
 
-    st.markdown("### Live Telemetry Preview")
-    render_live_telemetry(height=220)
+    render_season_stats(features_df, model_metrics, int(season), METRICS_DIR)
+    st.markdown("---")
+
+    st.markdown("### Recommendation Process")
+    st.markdown("""
+    <div class="glass-card">
+        <p style="color:#ccc;font-size:0.95rem;line-height:1.7;margin:0;">
+            The workflow generates candidate strategies, predicts lap times for each stint, simulates uncertainty around those predictions,
+            ranks the options by expected race time, and presents the fastest recommendation with a confidence range.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
 
     if model_metrics:
         render_model_comparison(model_metrics)
         st.markdown("---")
 
-    render_season_stats(features_df)
+    with st.expander("Current Limitations", expanded=False):
+        st.markdown("""
+        - The current models are trained on a single season of historical data, so they are strongest for the same style of races they were fitted on.
+        - Wet-weather laps remain materially harder to predict than dry-weather laps because the underlying pace is more variable.
+        - The app is best used as a decision-support tool for dry-race strategy planning rather than a full replacement for race engineering judgment.
+        """)
 
     st.markdown("---")
-    st.markdown("### Key Features")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("""
-        <div class="glass-card">
-            <h3>Feature Engineering</h3>
-            <p style="color:#999;font-size:0.85rem;line-height:1.6;">
-                20+ features including tire degradation curves, weather interpolation, safety car flags, and normalized lap deltas.
-            </p>
-        </div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown("""
-        <div class="glass-card">
-            <h3>Time-Based CV</h3>
-            <p style="color:#999;font-size:0.85rem;line-height:1.6;">
-                Rolling train/test splits — the model is always tested on future races it has not seen during training.
-            </p>
-        </div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown("""
-        <div class="glass-card">
-            <h3>Monte Carlo Engine</h3>
-            <p style="color:#999;font-size:0.85rem;line-height:1.6;">
-                Up to 2000 simulations per strategy with residual-based noise and race-specific pit loss sampling.
-            </p>
-        </div>""", unsafe_allow_html=True)
+    st.markdown("### Live Telemetry Preview")
+    render_live_telemetry(height=220)
 
 
 with tab_simulator:
@@ -458,7 +455,13 @@ with tab_simulator:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Race Setup")
-    selected_round = st.sidebar.selectbox("Round", rounds, index=len(rounds) - 1, key="round")
+    selected_round = st.sidebar.selectbox(
+        "Round",
+        rounds,
+        index=len(rounds) - 1,
+        key="round",
+        help="Choose the race weekend to analyze. This filters the available laps and pit-loss data for the selected event.",
+    )
     round_df = features_df[features_df["RoundNumber"] == selected_round].copy()
     if round_df.empty:
         st.error("No data for selected round.")
@@ -474,11 +477,23 @@ with tab_simulator:
 
     available_drivers = sorted(round_df["Driver"].dropna().unique().astype(str))
     default_driver_idx = available_drivers.index("VER") if "VER" in available_drivers else 0
-    selected_driver = st.sidebar.selectbox("Driver", available_drivers, index=default_driver_idx, key="driver")
+    selected_driver = st.sidebar.selectbox(
+        "Driver",
+        available_drivers,
+        index=default_driver_idx,
+        key="driver",
+        help="Select the driver whose lap history should define the race simulation. Different drivers can have very different pace and tyre-degradation patterns.",
+    )
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Model")
-    model_name = st.sidebar.selectbox("Model", ["hgb", "ridge"], index=0, key="model")
+    model_name = st.sidebar.selectbox(
+        "Model",
+        ["hgb", "ridge"],
+        index=0,
+        key="model",
+        help="Choose which trained regressor to use for lap-time prediction. HGB is the default because it usually captures nonlinear tyre degradation better than the Ridge baseline.",
+    )
     model = load_model(model_name)
     if model is None:
         import sklearn
@@ -503,7 +518,13 @@ with tab_simulator:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Strategy Parameters")
-    max_stops = st.sidebar.selectbox("Max Stops", [1, 2], index=1, key="max_stops")
+    max_stops = st.sidebar.selectbox(
+        "Max Stops",
+        [1, 2],
+        index=1,
+        key="max_stops",
+        help="Limit how many pit stops the strategy generator may consider. Higher values create more candidate strategies but also increase combinatorial complexity.",
+    )
     metrics_path = METRICS_DIR / f"pit_loss_{season}.csv"
     pit_loss_stats = load_pit_loss(metrics_path, int(selected_round)) or _fixed_pit_loss_stats(20.0)
 
@@ -517,13 +538,44 @@ with tab_simulator:
 
     min_stint_max = max(1, min(20, total_laps))
     min_stint_default = min(8, max(1, total_laps // (max_stops + 1)), min_stint_max)
-    min_stint = st.sidebar.slider("Min Stint Length", 1, min_stint_max, min_stint_default, key="min_stint")
+    min_stint = st.sidebar.slider(
+        "Min Stint Length",
+        1,
+        min_stint_max,
+        min_stint_default,
+        key="min_stint",
+        help="Set the shortest allowed stint. In practice, very short stints are usually unrealistic because they imply repeated pit stops and extreme tyre usage; raise this if you want only more plausible strategies.",
+    )
     max_stint_min = max(1, min_stint)
     max_stint_max = max(max_stint_min, min(50, total_laps))
-    max_stint = st.sidebar.slider("Max Stint Length", max_stint_min, max_stint_max, min(35, max_stint_max), key="max_stint")
-    stint_step = st.sidebar.slider("Stint Step", 1, 5, 2, key="stint_step")
-    include_wet = st.sidebar.checkbox("Include Wet Compounds", value=False, key="include_wet")
-    allow_single = st.sidebar.checkbox("Allow Single Compound", value=False, key="allow_single")
+    max_stint = st.sidebar.slider(
+        "Max Stint Length",
+        max_stint_min,
+        max_stint_max,
+        min(35, max_stint_max),
+        key="max_stint",
+        help="Set the longest stint the generator may use. Larger values allow fewer stops but may produce less realistic long-run tyre strategies.",
+    )
+    stint_step = st.sidebar.slider(
+        "Stint Step",
+        1,
+        5,
+        2,
+        key="stint_step",
+        help="Controls the spacing between candidate stint lengths. A smaller step tests more possible windows; a larger step speeds up the search.",
+    )
+    include_wet = st.sidebar.checkbox(
+        "Include Wet Compounds",
+        value=False,
+        key="include_wet",
+        help="Allow wet-weather compounds in the candidate strategies. Leave this off for a dry-race-focused search, which is typically more reliable for this model.",
+    )
+    allow_single = st.sidebar.checkbox(
+        "Allow Single Compound",
+        value=False,
+        key="allow_single",
+        help="Allow strategies that stay on one compound for the entire race. Turning this off forces the generator to consider mixed-compound strategies.",
+    )
 
     max_feasible_stops = max(0, total_laps // max(min_stint, 1) - 1)
     effective_max_stops = min(max_stops, max_feasible_stops)
@@ -532,13 +584,52 @@ with tab_simulator:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Simulation")
-    n_sims = st.sidebar.slider("Simulations", 1, 2000, 200, step=50, key="n_sims")
-    seed = st.sidebar.number_input("Random Seed", value=42, step=1, key="seed")
-    pit_loss_mode = st.sidebar.selectbox("Pit Loss Mode", ["sample", "fixed"], index=0, key="pit_loss_mode")
-    noise_sigma = st.sidebar.slider("Noise Sigma", 0.0, 5.0, 0.0, step=0.1, key="noise_sigma")
-    use_residuals = st.sidebar.checkbox("Use Residual Noise", value=True, key="use_residuals")
+    n_sims = st.sidebar.slider(
+        "Simulations",
+        1,
+        2000,
+        200,
+        step=50,
+        key="n_sims",
+        help="Number of Monte Carlo runs per strategy. More simulations give a smoother estimate of uncertainty but take longer to compute.",
+    )
+    seed = st.sidebar.number_input(
+        "Random Seed",
+        value=42,
+        step=1,
+        key="seed",
+        help="Fixes the random stream so the same inputs produce the same simulation ordering and ranking. Useful for repeatable demos and debugging.",
+    )
+    pit_loss_mode = st.sidebar.selectbox(
+        "Pit Loss Mode",
+        ["sample", "fixed"],
+        index=0,
+        key="pit_loss_mode",
+        help="Use 'sample' to draw pit-loss values from the race-specific distribution or 'fixed' to use the central estimate for every run.",
+    )
+    noise_sigma = st.sidebar.slider(
+        "Noise Sigma",
+        0.0,
+        5.0,
+        0.0,
+        step=0.1,
+        key="noise_sigma",
+        help="When residual noise is off, this value is the standard deviation of Gaussian noise added to the predicted lap times. It only matters when the simulator is not using residual-based noise.",
+    )
+    use_residuals = st.sidebar.checkbox(
+        "Use Residual Noise",
+        value=True,
+        key="use_residuals",
+        help="When enabled, the simulator uses residuals from the evaluation set for lap-by-lap noise. When disabled, it falls back to Gaussian noise controlled by Noise Sigma.",
+    )
     residuals = load_residuals_cached(model_name) if use_residuals else None
-    custom_strategy = st.sidebar.text_input("Custom Strategy", value="", placeholder="SOFT:18,MEDIUM:22,HARD:20", key="custom_strategy")
+    custom_strategy = st.sidebar.text_input(
+        "Custom Strategy",
+        value="",
+        placeholder="SOFT:18,MEDIUM:22,HARD:20",
+        key="custom_strategy",
+        help="Optional override for the generated strategy list. Use the format COMPOUND:lap_count, for example SOFT:18,MEDIUM:22,HARD:20.",
+    )
 
     st.markdown(f"### {event_name} — {selected_driver}")
     c1, c2, c3, c4 = st.columns(4)
@@ -581,6 +672,7 @@ with tab_simulator:
 
                 best = results.iloc[0]
                 render_best_strategy(best, n_sims, total_laps)
+                render_recommendation_explanation(best, results, n_sims)
 
                 insights = generate_insights(results, n_sims)
                 render_insights(insights)
