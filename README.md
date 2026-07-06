@@ -1,6 +1,6 @@
 # 🏎️ F1 Race Strategy Decision Support System
 
-> **Lap-time prediction + Monte Carlo strategy optimization for Formula 1 — built on real 2024 race data.**
+> **Lap-time prediction + Monte Carlo strategy optimization for Formula 1 — built on real 2021-2025 race data.**
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
