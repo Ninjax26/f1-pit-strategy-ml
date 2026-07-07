@@ -9,6 +9,8 @@
 
 This project is an interactive decision-support application that helps evaluate Formula 1 pit-stop strategies using historical race telemetry, machine learning, and Monte Carlo simulation. Users can compare multiple strategies, estimate total race time, and analyze uncertainty through an interactive Streamlit dashboard.
 
+Live app: [https://f1-predictor-temp.streamlit.app/](https://f1-predictor-temp.streamlit.app/)
+
 ---
 
 ## 📸 Screenshots
@@ -52,6 +54,7 @@ Modern Formula 1 strategy decisions depend on balancing tyre degradation, weathe
 | 🧠 **Machine Learning Prediction** | Dual-model training (Ridge + HistGradientBoosting) with rolling train/test splits. [Read more](docs/ML_PIPELINE.md) |
 | 🔬 **Feature Engineering** | Race-normalised lap delta target, safety-car flags, pit-lap flags, and weather features |
 | 📥 **CSV Export** | Download Monte Carlo simulation results as CSV |
+| 🧭 **Explainability** | Model Performance tab now includes rolling MAE, compound/round diagnostics, and feature importance artifacts |
 
 ---
 
@@ -110,14 +113,28 @@ Models are trained on **Rounds 1–16** (Bahrain → Italy) and evaluated on **R
 
 | Model | MAE (s) | RMSE (s) |
 |---|---|---|
-| **HGB (HistGradientBoosting)** | **1.49** | **2.30** |
+| **HGB (HistGradientBoosting)** | **1.41** | **2.25** |
 | Ridge Regression | 3.74 | 4.91 |
 
 _MAE and RMSE measure error relative to the true absolute lap time._
 
+### Latest Evaluation Artifacts
+
+- `data/metrics/metrics.json` stores the current split-wide metrics
+- `data/metrics/feature_importance_hgb.csv` stores permutation feature importance for HGB
+- `data/metrics/rolling_metrics_hgb.json` and `data/metrics/rolling_metrics_ridge.json` store rolling validation results
+- `data/metrics/predictions_hgb.parquet` and `data/metrics/predictions_ridge.parquet` store per-lap predictions and residuals used by Monte Carlo noise sampling
+
 ### Case Study — Max Verstappen, Round 14 (Belgian GP)
 
 In the Belgian GP case study, the simulator recommended a one-stop Medium → Hard strategy with a pit window comparable to the actual race strategy, demonstrating that the approach can generate realistic strategy recommendations under historical race conditions.
+
+### Current App Behavior
+
+- Streamlit dashboard with separate `Dashboard`, `Strategy Simulator`, and `Model Performance` tabs
+- Sidebar tooltips for each simulation control
+- Auto-run toggle for faster iteration during demo sessions
+- Monte Carlo outputs mean and P10/P50/P90 strategy time bands when multiple simulations are enabled
 
 ## 📊 Generated Evaluation Plots
 
@@ -141,6 +158,7 @@ python src/plots/make_plots.py --model hgb
 
 - Wet-weather laps show much higher MAE than dry-weather laps. The model is much more reliable for dry-race strategy decisions than for wet-race calls without a dedicated wet-weather model.
 - Round 21 (Las Vegas) shows an MAE spike compared with the rest of the season, which is worth investigating for unusual track conditions, safety-car effects, or data-quality issues.
+- The simulator still relies on historical lap-time patterns and sampled residuals, so it does not explicitly model live traffic, safety-car timing, or overtakes.
 
 ---
 

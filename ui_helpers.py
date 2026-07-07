@@ -278,10 +278,10 @@ def render_stint_gallery(results: pd.DataFrame, total_laps: int, top_n: int = 8)
         </div>""", unsafe_allow_html=True)
 
 
-def render_feature_importance(metrics_dir: Path):
+def render_feature_importance(metrics_dir: Path, model_name: str = "hgb"):
     import altair as alt
 
-    fi_path = metrics_dir / "feature_importance_hgb.csv"
+    fi_path = metrics_dir / f"feature_importance_{model_name}.csv"
     if not fi_path.exists():
         st.info("Feature importance data not available. Run evaluation pipeline to generate it.")
         return
@@ -301,7 +301,10 @@ def render_feature_importance(metrics_dir: Path):
 
     st.altair_chart(chart, width='stretch')
 
-    st.markdown('<div style="margin-top:0.5rem;color:#ccc;font-size:0.9rem;border-left:3px solid #7eb8da;padding-left:1rem;">Feature importance measures how much each input contributes to predicted lap times.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="margin-top:0.5rem;color:#ccc;font-size:0.9rem;border-left:3px solid #7eb8da;padding-left:1rem;">Feature importance measures how much each input contributes to predicted lap times.</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
@@ -311,6 +314,8 @@ def render_model_performance_tab(metrics_dir: Path, figures_dir: Path):
     model_toggle = st.radio("Select Model", ["hgb", "ridge"], horizontal=True, index=0, key="perf_model_toggle")
     label_map = {"hgb": "HGB (Gradient Boosting)", "ridge": "Ridge Regression"}
     st.markdown(f"**Results for: {label_map[model_toggle]}**")
+    render_feature_importance(metrics_dir, model_toggle)
+    st.markdown("---")
 
     sections_rendered = 0
 

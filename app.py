@@ -134,7 +134,12 @@ def build_laps(base_laps, strategy):
     return laps
 
 
-def build_race_template(round_df: pd.DataFrame, selected_driver: str, total_laps: int) -> pd.DataFrame:
+def build_race_template(
+    round_df: pd.DataFrame,
+    selected_driver: str,
+    total_laps: int,
+    season: int | None = 2024,
+) -> pd.DataFrame:
     """Build a full-race template for the selected driver using the round's lap count."""
     if round_df.empty:
         return pd.DataFrame()
@@ -145,6 +150,11 @@ def build_race_template(round_df: pd.DataFrame, selected_driver: str, total_laps
         driver_rows.loc[:, "Driver"] = selected_driver
 
     template = pd.DataFrame(index=range(total_laps))
+    season_value = season
+    if season_value is None and "Season" in round_df.columns and round_df["Season"].dropna().size:
+        season_value = int(round_df["Season"].dropna().iloc[0])
+    if season_value is None:
+        season_value = 2024
     for column in [
         "Season",
         "LapTimeSeconds",
@@ -168,6 +178,9 @@ def build_race_template(round_df: pd.DataFrame, selected_driver: str, total_laps
         "RaceMedianLap",
         "LapTimeDelta",
     ]:
+        if column == "Season":
+            template[column] = season_value
+            continue
         if column in round_df.columns:
             if column in {"LapNumber", "Stint", "TyreLife", "RoundNumber", "Season"}:
                 template[column] = range(1, total_laps + 1) if column == "LapNumber" else template.index
@@ -326,11 +339,14 @@ def load_residuals_cached(model_name):
 
 @st.cache_data(show_spinner=False)
 def load_model_metrics(season):
-    path = METRICS_DIR / "metrics.json"
-    if not path.exists():
-        return None
-    with open(path) as f:
-        return json.load(f)
+    for path in (
+        METRICS_DIR / f"metrics_{season}.json",
+        METRICS_DIR / "metrics.json",
+    ):
+        if path.exists():
+            with open(path) as f:
+                return json.load(f)
+    return None
 
 
 def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_loss_mode, residuals, noise_sigma, seed):
@@ -534,7 +550,7 @@ with tab_simulator:
         st.stop()
     race_df = race_df.sort_values("LapNumber").reset_index(drop=True)
     total_laps = int(round_df["LapNumber"].dropna().max()) if "LapNumber" in round_df.columns else int(race_df["LapNumber"].max())
-    race_df = build_race_template(round_df, selected_driver, total_laps)
+    race_df = build_race_template(round_df, selected_driver, total_laps, season=int(season))
 
     min_stint_max = max(1, min(20, total_laps))
     min_stint_default = min(8, max(1, total_laps // (max_stops + 1)), min_stint_max)
@@ -735,7 +751,6 @@ with tab_simulator:
 
 with tab_model:
     try:
-        render_feature_importance(METRICS_DIR)
         st.markdown("---")
         render_model_performance_tab(METRICS_DIR, FIGURES_DIR)
     except Exception as e:
