@@ -14,6 +14,8 @@ Real race outcomes are not deterministic. A driver can lose time behind traffic,
 
 5. **Total race time** = sum of all predicted lap times + sum of all pit-stop time costs. This is computed for every simulation run. The distribution of totals gives P10/P50/P90 confidence bands for each strategy.
 
-6. **Strategies are ranked** by mean total race time across simulations.
+6. **Counterfactual support** is checked against prior-season tyre-life distributions for the circuit and compound. Laps beyond the 99th-percentile support limit receive a conservative penalty; global history is used only when circuit-specific support is unavailable.
+
+7. **Strategies are ranked** by a conservative score: mean race time + 25% of the P90 upper-tail margin + historical-support penalty. Mean and P10/P50/P90 remain visible so the ranking is auditable.
 
 The number of simulations is configurable from 1 (deterministic, fixed pit loss) up to 2,000.

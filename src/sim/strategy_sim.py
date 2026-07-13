@@ -338,8 +338,8 @@ def main() -> None:
         pit_loss_mode = "fixed"
 
     results = []
-    target_is_delta = "LapTimeDelta" in race_df.columns and "RaceMedianLap" in race_df.columns
-    race_median = race_df["RaceMedianLap"].iloc[0] if "RaceMedianLap" in race_df.columns else race_df["LapTimeSeconds"].median()
+    target_is_delta = "LapTimeDelta" in race_df.columns and "PreRaceBaseline" in race_df.columns
+    race_median = race_df["PreRaceBaseline"].iloc[0] if "PreRaceBaseline" in race_df.columns else race_df["LapTimeSeconds"].median()
 
     for name, strategy in strategies.items():
         laps = build_laps(race_df, strategy)

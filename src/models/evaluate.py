@@ -118,6 +118,9 @@ def main() -> None:
 
     features_path = Path(args.features) / f"features_{args.season}.parquet"
     df = pd.read_parquet(features_path)
+    if "PreRaceBaseline" not in df.columns:
+        raise ValueError("PreRaceBaseline is required. Rebuild features with prior-season history first.")
+    df = df[df["PreRaceBaseline"].notna()].copy()
     if not args.include_pit_laps and "IsPitLap" in df.columns:
         df = df[~df["IsPitLap"]]
     if not args.include_safety_cars and "IsSafetyCar" in df.columns:
@@ -145,8 +148,8 @@ def main() -> None:
                     X_test = X_test.drop(columns=["LapTimeSeconds"])
                 model.fit(X_train, train_df[target])
                 preds = model.predict(X_test)
-                if target == "LapTimeDelta" and "RaceMedianLap" in test_df.columns and "LapTimeSeconds" in test_df.columns:
-                    preds_seconds = preds + test_df["RaceMedianLap"].to_numpy()
+                if target == "LapTimeDelta" and "PreRaceBaseline" in test_df.columns and "LapTimeSeconds" in test_df.columns:
+                    preds_seconds = preds + test_df["PreRaceBaseline"].to_numpy()
                     metrics = metrics_for_split(test_df["LapTimeSeconds"], preds_seconds)
                 else:
                     metrics = metrics_for_split(test_df[target], preds)
@@ -169,13 +172,13 @@ def main() -> None:
             X_test = X_test.drop(columns=["LapTimeSeconds"])
         preds = model.predict(X_test)
         df_pred = test_df.copy()
-        if target == "LapTimeDelta" and "RaceMedianLap" in df_pred.columns and "LapTimeSeconds" in df_pred.columns:
-            df_pred["pred"] = preds + df_pred["RaceMedianLap"].to_numpy()
-            df_pred["residual"] = df_pred["pred"] - df_pred["LapTimeSeconds"]
+        if target == "LapTimeDelta" and "PreRaceBaseline" in df_pred.columns and "LapTimeSeconds" in df_pred.columns:
+            df_pred["pred"] = preds + df_pred["PreRaceBaseline"].to_numpy()
+            df_pred["residual"] = df_pred["LapTimeSeconds"] - df_pred["pred"]
             overall = metrics_for_split(df_pred["LapTimeSeconds"], df_pred["pred"])
         else:
             df_pred["pred"] = preds
-            df_pred["residual"] = df_pred["pred"] - df_pred[target]
+            df_pred["residual"] = df_pred[target] - df_pred["pred"]
             overall = metrics_for_split(df_pred[target], df_pred["pred"])
 
         overall_results[model_name] = overall
@@ -183,7 +186,7 @@ def main() -> None:
         if model_name == "hgb":
             print(f"Computing permutation feature importance for {model_name}...")
             # We evaluate importance against the target the model was trained on
-            importances = permutation_importance(model, X_test, test_df[target], n_repeats=5, random_state=42, n_jobs=-1)
+            importances = permutation_importance(model, X_test, test_df[target], n_repeats=5, random_state=42, n_jobs=1)
             fi_df = pd.DataFrame({
                 "feature": X_test.columns,
                 "importance": importances.importances_mean

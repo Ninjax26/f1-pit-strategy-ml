@@ -1,0 +1,610 @@
+{
+  "target_season": 2024,
+  "source_seasons": [
+    2021,
+    2022,
+    2023
+  ],
+  "support_quantile": 0.99,
+  "global": {
+    "HARD": {
+      "n_laps": 28521,
+      "max_supported_tyre_life": 46,
+      "observed_max_tyre_life": 69
+    },
+    "INTERMEDIATE": {
+      "n_laps": 3227,
+      "max_supported_tyre_life": 40,
+      "observed_max_tyre_life": 57
+    },
+    "MEDIUM": {
+      "n_laps": 24241,
+      "max_supported_tyre_life": 40,
+      "observed_max_tyre_life": 56
+    },
+    "NONE": {
+      "n_laps": 64,
+      "max_supported_tyre_life": 41,
+      "observed_max_tyre_life": 41
+    },
+    "SOFT": {
+      "n_laps": 9291,
+      "max_supported_tyre_life": 33,
+      "observed_max_tyre_life": 49
+    },
+    "WET": {
+      "n_laps": 295,
+      "max_supported_tyre_life": 20,
+      "observed_max_tyre_life": 20
+    }
+  },
+  "events": {
+    "Abu Dhabi Grand Prix": {
+      "HARD": {
+        "n_laps": 1846,
+        "max_supported_tyre_life": 38,
+        "observed_max_tyre_life": 45
+      },
+      "MEDIUM": {
+        "n_laps": 924,
+        "max_supported_tyre_life": 28,
+        "observed_max_tyre_life": 34
+      },
+      "SOFT": {
+        "n_laps": 169,
+        "max_supported_tyre_life": 22,
+        "observed_max_tyre_life": 23
+      }
+    },
+    "Australian Grand Prix": {
+      "HARD": {
+        "n_laps": 1325,
+        "max_supported_tyre_life": 50,
+        "observed_max_tyre_life": 56
+      },
+      "MEDIUM": {
+        "n_laps": 331,
+        "max_supported_tyre_life": 33,
+        "observed_max_tyre_life": 36
+      },
+      "SOFT": {
+        "n_laps": 9,
+        "max_supported_tyre_life": 7,
+        "observed_max_tyre_life": 7
+      }
+    },
+    "Austrian Grand Prix": {
+      "HARD": {
+        "n_laps": 1933,
+        "max_supported_tyre_life": 39,
+        "observed_max_tyre_life": 47
+      },
+      "MEDIUM": {
+        "n_laps": 1156,
+        "max_supported_tyre_life": 33,
+        "observed_max_tyre_life": 36
+      },
+      "NONE": {
+        "n_laps": 30,
+        "max_supported_tyre_life": 34,
+        "observed_max_tyre_life": 34
+      },
+      "SOFT": {
+        "n_laps": 41,
+        "max_supported_tyre_life": 19,
+        "observed_max_tyre_life": 19
+      }
+    },
+    "Azerbaijan Grand Prix": {
+      "HARD": {
+        "n_laps": 1820,
+        "max_supported_tyre_life": 43,
+        "observed_max_tyre_life": 49
+      },
+      "MEDIUM": {
+        "n_laps": 411,
+        "max_supported_tyre_life": 17,
+        "observed_max_tyre_life": 19
+      },
+      "SOFT": {
+        "n_laps": 200,
+        "max_supported_tyre_life": 18,
+        "observed_max_tyre_life": 19
+      }
+    },
+    "Bahrain Grand Prix": {
+      "HARD": {
+        "n_laps": 1000,
+        "max_supported_tyre_life": 27,
+        "observed_max_tyre_life": 31
+      },
+      "MEDIUM": {
+        "n_laps": 725,
+        "max_supported_tyre_life": 23,
+        "observed_max_tyre_life": 27
+      },
+      "SOFT": {
+        "n_laps": 1011,
+        "max_supported_tyre_life": 21,
+        "observed_max_tyre_life": 24
+      }
+    },
+    "Belgian Grand Prix": {
+      "HARD": {
+        "n_laps": 242,
+        "max_supported_tyre_life": 19,
+        "observed_max_tyre_life": 19
+      },
+      "MEDIUM": {
+        "n_laps": 711,
+        "max_supported_tyre_life": 20,
+        "observed_max_tyre_life": 22
+      },
+      "SOFT": {
+        "n_laps": 430,
+        "max_supported_tyre_life": 24,
+        "observed_max_tyre_life": 27
+      }
+    },
+    "British Grand Prix": {
+      "HARD": {
+        "n_laps": 756,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 33
+      },
+      "MEDIUM": {
+        "n_laps": 1148,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 34
+      },
+      "SOFT": {
+        "n_laps": 426,
+        "max_supported_tyre_life": 26,
+        "observed_max_tyre_life": 30
+      }
+    },
+    "Canadian Grand Prix": {
+      "HARD": {
+        "n_laps": 1569,
+        "max_supported_tyre_life": 53,
+        "observed_max_tyre_life": 63
+      },
+      "MEDIUM": {
+        "n_laps": 648,
+        "max_supported_tyre_life": 35,
+        "observed_max_tyre_life": 38
+      },
+      "SOFT": {
+        "n_laps": 10,
+        "max_supported_tyre_life": 9,
+        "observed_max_tyre_life": 9
+      }
+    },
+    "Dutch Grand Prix": {
+      "HARD": {
+        "n_laps": 764,
+        "max_supported_tyre_life": 42,
+        "observed_max_tyre_life": 47
+      },
+      "INTERMEDIATE": {
+        "n_laps": 212,
+        "max_supported_tyre_life": 18,
+        "observed_max_tyre_life": 20
+      },
+      "MEDIUM": {
+        "n_laps": 1113,
+        "max_supported_tyre_life": 39,
+        "observed_max_tyre_life": 47
+      },
+      "SOFT": {
+        "n_laps": 1436,
+        "max_supported_tyre_life": 39,
+        "observed_max_tyre_life": 49
+      }
+    },
+    "Emilia Romagna Grand Prix": {
+      "HARD": {
+        "n_laps": 30,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 32
+      },
+      "INTERMEDIATE": {
+        "n_laps": 578,
+        "max_supported_tyre_life": 27,
+        "observed_max_tyre_life": 27
+      },
+      "MEDIUM": {
+        "n_laps": 1073,
+        "max_supported_tyre_life": 45,
+        "observed_max_tyre_life": 48
+      },
+      "SOFT": {
+        "n_laps": 191,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 32
+      },
+      "WET": {
+        "n_laps": 12,
+        "max_supported_tyre_life": 13,
+        "observed_max_tyre_life": 13
+      }
+    },
+    "French Grand Prix": {
+      "HARD": {
+        "n_laps": 1165,
+        "max_supported_tyre_life": 36,
+        "observed_max_tyre_life": 37
+      },
+      "MEDIUM": {
+        "n_laps": 693,
+        "max_supported_tyre_life": 29,
+        "observed_max_tyre_life": 35
+      },
+      "SOFT": {
+        "n_laps": 18,
+        "max_supported_tyre_life": 19,
+        "observed_max_tyre_life": 19
+      }
+    },
+    "Hungarian Grand Prix": {
+      "HARD": {
+        "n_laps": 1480,
+        "max_supported_tyre_life": 46,
+        "observed_max_tyre_life": 49
+      },
+      "MEDIUM": {
+        "n_laps": 1474,
+        "max_supported_tyre_life": 33,
+        "observed_max_tyre_life": 43
+      },
+      "SOFT": {
+        "n_laps": 372,
+        "max_supported_tyre_life": 26,
+        "observed_max_tyre_life": 29
+      }
+    },
+    "Italian Grand Prix": {
+      "HARD": {
+        "n_laps": 1076,
+        "max_supported_tyre_life": 35,
+        "observed_max_tyre_life": 39
+      },
+      "MEDIUM": {
+        "n_laps": 1216,
+        "max_supported_tyre_life": 30,
+        "observed_max_tyre_life": 34
+      },
+      "SOFT": {
+        "n_laps": 164,
+        "max_supported_tyre_life": 23,
+        "observed_max_tyre_life": 24
+      }
+    },
+    "Japanese Grand Prix": {
+      "HARD": {
+        "n_laps": 415,
+        "max_supported_tyre_life": 27,
+        "observed_max_tyre_life": 29
+      },
+      "INTERMEDIATE": {
+        "n_laps": 348,
+        "max_supported_tyre_life": 23,
+        "observed_max_tyre_life": 24
+      },
+      "MEDIUM": {
+        "n_laps": 239,
+        "max_supported_tyre_life": 21,
+        "observed_max_tyre_life": 23
+      },
+      "SOFT": {
+        "n_laps": 59,
+        "max_supported_tyre_life": 18,
+        "observed_max_tyre_life": 18
+      },
+      "WET": {
+        "n_laps": 22,
+        "max_supported_tyre_life": 8,
+        "observed_max_tyre_life": 8
+      }
+    },
+    "Las Vegas Grand Prix": {
+      "HARD": {
+        "n_laps": 574,
+        "max_supported_tyre_life": 33,
+        "observed_max_tyre_life": 35
+      },
+      "MEDIUM": {
+        "n_laps": 180,
+        "max_supported_tyre_life": 25,
+        "observed_max_tyre_life": 26
+      },
+      "SOFT": {
+        "n_laps": 7,
+        "max_supported_tyre_life": 9,
+        "observed_max_tyre_life": 9
+      }
+    },
+    "Mexico City Grand Prix": {
+      "HARD": {
+        "n_laps": 1393,
+        "max_supported_tyre_life": 51,
+        "observed_max_tyre_life": 56
+      },
+      "MEDIUM": {
+        "n_laps": 1807,
+        "max_supported_tyre_life": 43,
+        "observed_max_tyre_life": 48
+      },
+      "SOFT": {
+        "n_laps": 439,
+        "max_supported_tyre_life": 34,
+        "observed_max_tyre_life": 37
+      }
+    },
+    "Miami Grand Prix": {
+      "HARD": {
+        "n_laps": 1315,
+        "max_supported_tyre_life": 49,
+        "observed_max_tyre_life": 54
+      },
+      "MEDIUM": {
+        "n_laps": 638,
+        "max_supported_tyre_life": 26,
+        "observed_max_tyre_life": 29
+      },
+      "SOFT": {
+        "n_laps": 40,
+        "max_supported_tyre_life": 19,
+        "observed_max_tyre_life": 19
+      }
+    },
+    "Monaco Grand Prix": {
+      "HARD": {
+        "n_laps": 1563,
+        "max_supported_tyre_life": 53,
+        "observed_max_tyre_life": 63
+      },
+      "INTERMEDIATE": {
+        "n_laps": 442,
+        "max_supported_tyre_life": 24,
+        "observed_max_tyre_life": 26
+      },
+      "MEDIUM": {
+        "n_laps": 869,
+        "max_supported_tyre_life": 50,
+        "observed_max_tyre_life": 54
+      },
+      "NONE": {
+        "n_laps": 34,
+        "max_supported_tyre_life": 41,
+        "observed_max_tyre_life": 41
+      },
+      "SOFT": {
+        "n_laps": 476,
+        "max_supported_tyre_life": 37,
+        "observed_max_tyre_life": 39
+      },
+      "WET": {
+        "n_laps": 261,
+        "max_supported_tyre_life": 20,
+        "observed_max_tyre_life": 20
+      }
+    },
+    "Portuguese Grand Prix": {
+      "HARD": {
+        "n_laps": 412,
+        "max_supported_tyre_life": 43,
+        "observed_max_tyre_life": 44
+      },
+      "MEDIUM": {
+        "n_laps": 527,
+        "max_supported_tyre_life": 51,
+        "observed_max_tyre_life": 56
+      },
+      "SOFT": {
+        "n_laps": 149,
+        "max_supported_tyre_life": 37,
+        "observed_max_tyre_life": 38
+      }
+    },
+    "Pre-Season Test": {
+      "HARD": {
+        "n_laps": 1076,
+        "max_supported_tyre_life": 34,
+        "observed_max_tyre_life": 38
+      },
+      "MEDIUM": {
+        "n_laps": 614,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 38
+      },
+      "SOFT": {
+        "n_laps": 19,
+        "max_supported_tyre_life": 13,
+        "observed_max_tyre_life": 13
+      }
+    },
+    "Pre-Season Testing": {
+      "HARD": {
+        "n_laps": 120,
+        "max_supported_tyre_life": 30,
+        "observed_max_tyre_life": 31
+      },
+      "MEDIUM": {
+        "n_laps": 444,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 33
+      },
+      "SOFT": {
+        "n_laps": 251,
+        "max_supported_tyre_life": 28,
+        "observed_max_tyre_life": 30
+      }
+    },
+    "Pre-Season Track Session": {
+      "HARD": {
+        "n_laps": 150,
+        "max_supported_tyre_life": 26,
+        "observed_max_tyre_life": 27
+      },
+      "MEDIUM": {
+        "n_laps": 348,
+        "max_supported_tyre_life": 33,
+        "observed_max_tyre_life": 34
+      },
+      "SOFT": {
+        "n_laps": 168,
+        "max_supported_tyre_life": 19,
+        "observed_max_tyre_life": 20
+      }
+    },
+    "Qatar Grand Prix": {
+      "HARD": {
+        "n_laps": 744,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 34
+      },
+      "MEDIUM": {
+        "n_laps": 862,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 36
+      },
+      "SOFT": {
+        "n_laps": 225,
+        "max_supported_tyre_life": 27,
+        "observed_max_tyre_life": 28
+      }
+    },
+    "Russian Grand Prix": {
+      "HARD": {
+        "n_laps": 575,
+        "max_supported_tyre_life": 34,
+        "observed_max_tyre_life": 35
+      },
+      "INTERMEDIATE": {
+        "n_laps": 49,
+        "max_supported_tyre_life": 11,
+        "observed_max_tyre_life": 11
+      },
+      "MEDIUM": {
+        "n_laps": 318,
+        "max_supported_tyre_life": 25,
+        "observed_max_tyre_life": 27
+      }
+    },
+    "Saudi Arabian Grand Prix": {
+      "HARD": {
+        "n_laps": 1263,
+        "max_supported_tyre_life": 40,
+        "observed_max_tyre_life": 49
+      },
+      "MEDIUM": {
+        "n_laps": 925,
+        "max_supported_tyre_life": 35,
+        "observed_max_tyre_life": 40
+      },
+      "SOFT": {
+        "n_laps": 42,
+        "max_supported_tyre_life": 15,
+        "observed_max_tyre_life": 15
+      }
+    },
+    "Singapore Grand Prix": {
+      "HARD": {
+        "n_laps": 539,
+        "max_supported_tyre_life": 42,
+        "observed_max_tyre_life": 42
+      },
+      "INTERMEDIATE": {
+        "n_laps": 490,
+        "max_supported_tyre_life": 35,
+        "observed_max_tyre_life": 38
+      },
+      "MEDIUM": {
+        "n_laps": 599,
+        "max_supported_tyre_life": 37,
+        "observed_max_tyre_life": 42
+      },
+      "SOFT": {
+        "n_laps": 141,
+        "max_supported_tyre_life": 25,
+        "observed_max_tyre_life": 26
+      }
+    },
+    "Spanish Grand Prix": {
+      "HARD": {
+        "n_laps": 539,
+        "max_supported_tyre_life": 45,
+        "observed_max_tyre_life": 50
+      },
+      "MEDIUM": {
+        "n_laps": 1414,
+        "max_supported_tyre_life": 35,
+        "observed_max_tyre_life": 42
+      },
+      "SOFT": {
+        "n_laps": 1488,
+        "max_supported_tyre_life": 28,
+        "observed_max_tyre_life": 31
+      }
+    },
+    "Styrian Grand Prix": {
+      "HARD": {
+        "n_laps": 682,
+        "max_supported_tyre_life": 44,
+        "observed_max_tyre_life": 47
+      },
+      "MEDIUM": {
+        "n_laps": 394,
+        "max_supported_tyre_life": 39,
+        "observed_max_tyre_life": 40
+      },
+      "SOFT": {
+        "n_laps": 153,
+        "max_supported_tyre_life": 32,
+        "observed_max_tyre_life": 33
+      }
+    },
+    "S\u00e3o Paulo Grand Prix": {
+      "HARD": {
+        "n_laps": 697,
+        "max_supported_tyre_life": 63,
+        "observed_max_tyre_life": 69
+      },
+      "MEDIUM": {
+        "n_laps": 1312,
+        "max_supported_tyre_life": 29,
+        "observed_max_tyre_life": 33
+      },
+      "SOFT": {
+        "n_laps": 1130,
+        "max_supported_tyre_life": 29,
+        "observed_max_tyre_life": 34
+      }
+    },
+    "Turkish Grand Prix": {
+      "INTERMEDIATE": {
+        "n_laps": 1108,
+        "max_supported_tyre_life": 48,
+        "observed_max_tyre_life": 57
+      }
+    },
+    "United States Grand Prix": {
+      "HARD": {
+        "n_laps": 1458,
+        "max_supported_tyre_life": 33,
+        "observed_max_tyre_life": 38
+      },
+      "MEDIUM": {
+        "n_laps": 1128,
+        "max_supported_tyre_life": 30,
+        "observed_max_tyre_life": 38
+      },
+      "SOFT": {
+        "n_laps": 27,
+        "max_supported_tyre_life": 13,
+        "observed_max_tyre_life": 13
+      }
+    }
+  }
+}

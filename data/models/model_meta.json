@@ -1,8 +1,28 @@
 {
+  "sklearn_version": "1.8.0",
+  "training_date": "2026-07-14",
+  "training_season": 2024,
+  "training_data": "features_2024.parquet (Rounds 1-16)",
+  "target_variable": "LapTimeDelta",
+  "absolute_time_baseline": "PreRaceBaseline from the latest available prior season",
+  "feature_list": [
+    "AirTemp",
+    "Compound",
+    "Driver",
+    "EventName",
+    "Humidity",
+    "LapNumber",
+    "RoundNumber",
+    "Stint",
+    "Team",
+    "TrackStatus",
+    "TrackTemp",
+    "TyreLife",
+    "WindDirection",
+    "WindSpeed"
+  ],
   "models": [
     "hgb_model",
     "ridge_model"
-  ],
-  "sklearn_version": "1.8.0",
-  "training_date": "2026-07-06"
+  ]
 }

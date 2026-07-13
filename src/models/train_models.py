@@ -1,10 +1,12 @@
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Ridge
@@ -104,6 +106,9 @@ def main() -> None:
 
     features_path = Path(args.features) / f"features_{args.season}.parquet"
     df = pd.read_parquet(features_path)
+    if "PreRaceBaseline" not in df.columns:
+        raise ValueError("PreRaceBaseline is required. Rebuild features with prior-season history first.")
+    df = df[df["PreRaceBaseline"].notna()].copy()
     train_rounds = parse_rounds(args.train_rounds)
     test_rounds = parse_rounds(args.test_rounds)
 
@@ -122,10 +127,10 @@ def main() -> None:
     if "LapTimeSeconds" in X_train.columns:
         X_train = X_train.drop(columns=["LapTimeSeconds"])
         X_test = X_test.drop(columns=["LapTimeSeconds"])
-    test_race_median = test_df["RaceMedianLap"] if "RaceMedianLap" in test_df.columns else None
+    test_race_median = test_df["PreRaceBaseline"]
     y_test_seconds = test_df["LapTimeSeconds"] if "LapTimeSeconds" in test_df.columns else None
 
-    preprocessor, _, _ = build_preprocessor(df)
+    preprocessor, categorical_features, numeric_features = build_preprocessor(df)
     ridge = Pipeline(steps=[("preprocess", preprocessor), ("model", Ridge(alpha=1.0, random_state=42))])
     hgb = Pipeline(
         steps=[
@@ -154,6 +159,20 @@ def main() -> None:
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
     joblib.dump(ridge, Path(args.out_dir) / "ridge_model.joblib")
     joblib.dump(hgb, Path(args.out_dir) / "hgb_model.joblib")
+    common_meta = {
+        "sklearn_version": sklearn.__version__,
+        "training_date": date.today().isoformat(),
+        "training_season": args.season,
+        "training_data": f"features_{args.season}.parquet (Rounds {args.train_rounds})",
+        "target_variable": target,
+        "absolute_time_baseline": "PreRaceBaseline from the latest available prior season",
+        "feature_list": sorted(categorical_features + numeric_features),
+    }
+    for model_name, model in (("ridge", ridge), ("hgb", hgb)):
+        with open(Path(args.out_dir) / f"model_meta_{model_name}.json", "w") as f:
+            json.dump({**common_meta, "model_name": f"{model_name}_model", "estimator_type": type(model.named_steps["model"]).__name__}, f, indent=2)
+    with open(Path(args.out_dir) / "model_meta.json", "w") as f:
+        json.dump({**common_meta, "models": ["hgb_model", "ridge_model"]}, f, indent=2)
     Path(args.metrics_dir).mkdir(parents=True, exist_ok=True)
     with open(Path(args.metrics_dir) / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)

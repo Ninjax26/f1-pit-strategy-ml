@@ -1,46 +1,24 @@
 # Multi-Season Generalization Testing
 
-This document details the cross-season generalization performance of the lap-time ML pipeline, specifically examining how well the models generalize across different seasons within the same regulation era, and how severely they degrade across major regulation shifts.
+This evaluation measures absolute lap-time performance without using the completed target race as its own baseline. Each supported race uses the latest available earlier-season median for the same circuit as `PreRaceBaseline`; `Season`, baseline columns, targets, pit laps, and safety-car laps are excluded from model inputs.
 
 ## Experimental Design
 
-To isolate the effects of data distribution shifts, we run three distinct experiments. In all experiments, the `Season` year is strictly used as a split key and is **dropped** from the feature set before training, preventing the model from explicitly memorizing season-specific base paces.
-
-1. **Baseline (Within-Season)**
-   - **Train:** 2024 Rounds 1–16
-   - **Test:** 2024 Rounds 17–24
-   - *Purpose:* Establishes the expected performance when training and testing within the exact same year.
-
-2. **Experiment 1: Primary Generalization (Same Era)**
-   - **Train:** 2022, 2023, 2024 (Ground Effect Era)
-   - **Test:** 2025
-   - *Purpose:* Tests if the model learns general tire degradation and fuel burn physics that apply to future, unseen races within the same regulatory framework.
-
-3. **Experiment 2: Regulation-Shift Stress Test**
-   - **Train:** 2021 (Pre-2022 regulations, 13-inch tires, over-car aero)
-   - **Test:** 2022 (Ground-effect aero, 18-inch tires)
-   - *Purpose:* A deliberate out-of-distribution test. The model is forced to predict lap times for a fundamentally different car concept.
+1. **Within-season baseline:** train on 2024 Rounds 1–16 and test on Rounds 17–24.
+2. **Cross-season evaluation:** train on supported laps from 2022–2024 and test on supported 2025 laps.
+3. **Regulation-shift test:** intentionally skipped because 2021 has no earlier-season data in this repository. Running it with the completed 2021 race median would reintroduce the leakage this evaluation is designed to remove.
 
 ## Results
 
 | Experiment | Train Set | Test Set | Model | MAE | RMSE | Test Laps | Unseen Track Rows |
 |---|---|---|---|---|---|---|---|
-| Baseline 2024 (Within-Season) | 2024 Rounds 1–16 | 2024 Rounds 17–24 | `hgb` | 1.412s | 2.250s | 7,454 | 8,223 |
-| Baseline 2024 (Within-Season) | 2024 Rounds 1–16 | 2024 Rounds 17–24 | `ridge` | 3.741s | 4.913s | 7,454 | 8,223 |
-| Exp 1: Generalization (Same Era) | 2022+2023+2024 | 2025 (25 rounds) | `hgb` | **1.335s** | 2.732s | 24,747 | 0 |
-| Exp 1: Generalization (Same Era) | 2022+2023+2024 | 2025 (25 rounds) | `ridge` | 1.585s | 2.545s | 24,747 | 0 |
-| Exp 2: Reg-Shift Stress Test | 2021 | 2022 | `hgb` | **2.131s** | 4.041s | 21,683 | 5,330 |
-| Exp 2: Reg-Shift Stress Test | 2021 | 2022 | `ridge` | 2.404s | 3.974s | 21,683 | 5,330 |
+| Baseline 2024 | 2024 Rounds 1–16 | 2024 Rounds 17–24 | `hgb` | **1.751s** | **2.795s** | 7,454 | 7,454 |
+| Baseline 2024 | 2024 Rounds 1–16 | 2024 Rounds 17–24 | `ridge` | 3.175s | 3.978s | 7,454 | 7,454 |
+| Cross-season | 2022+2023+2024 | 2025 | `hgb` | **3.802s** | 6.014s | 24,747 | 0 |
+| Cross-season | 2022+2023+2024 | 2025 | `ridge` | 3.987s | 5.465s | 24,747 | 0 |
 
 ## Interpretation
 
-**1. Baseline vs. Primary Generalization (Same Era)**
-The model generalizes well within the same regulation era. The HGB model achieved a Mean Absolute Error (MAE) of **1.335s** on the completely unseen 2025 season (trained on 2022-2024), which is actually slightly *better* than the 1.412s MAE achieved on the 2024 within-season test set. This confirms the model is successfully learning underlying physics (tire degradation profiles, track evolution, fuel burn) rather than memorizing specific races, as the combined three-year dataset provides a much richer set of training examples.
+The within-season HGB result remains useful, but it is weaker than the previous oracle-baseline result because the model must now absorb year-to-year circuit pace changes. The cross-season MAE rises to 3.802 seconds, showing meaningful distribution shift even within the same regulation era. This does not prove that the model learned complete tyre or fuel physics; it shows that historical relationships transfer only partially.
 
-**2. The Regulation-Shift Gap**
-As expected, the model degrades when predicting across a major regulation change. When trained strictly on 2021 data (13-inch tires, over-car aero) and tested on 2022 data (18-inch tires, ground-effect aero), the HGB model's MAE jumped to **2.131s** (a roughly +0.8s penalty compared to same-era generalization). 
-While the model didn't fail completely—it still captures universal truths like "old hard tires are slower than new soft tires"—the fundamental tire degradation curves and car behavior changed enough in 2022 to introduce a noticeable baseline shift. This proves that historical ML models in F1 require retraining when the FIA introduces major aerodynamic or mechanical regulation changes.
-
-## Note on Unseen Tracks
-
-When predicting future seasons, the model will encounter tracks it was never trained on. Our models handle categorical variables via `OneHotEncoder(handle_unknown="ignore")`. This means unseen tracks are gracefully assigned an all-zero encoding for track-specific features. The base predictions rely on track temperatures, tire compounds, and stint lengths rather than track memorization. The number of rows affected by unseen tracks is explicitly recorded in the results table above.
+All 2024 holdout events are unseen categorical event names because the split is by race round. `OneHotEncoder(handle_unknown="ignore")` handles those names operationally, but the model lacks explicit circuit geometry, surface, and corner-profile features. The 2025 test has no unseen event names because those circuits appeared in the 2022–2024 training seasons.

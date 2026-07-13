@@ -10,6 +10,8 @@ import sklearn
 import pytest
 
 import app
+from src.features.build_features import apply_pre_race_baseline
+from src.sim.support import assess_strategy_support, build_support_profile
 
 DATA_DIR = Path("data")
 FEATURES_DIR = DATA_DIR / "features"
@@ -66,6 +68,27 @@ class TestFeatureData:
         rounds = sorted(df["RoundNumber"].dropna().unique().astype(int))
         assert len(rounds) >= 20, f"Expected 20+ rounds, got {len(rounds)}"
 
+    def test_pre_race_baseline_uses_prior_seasons_only(self):
+        target = pd.DataFrame({
+            "Season": [2024], "EventName": ["Example GP"], "LapTimeSeconds": [91.0],
+        })
+        history = pd.DataFrame({
+            "Season": [2022, 2023, 2024],
+            "EventName": ["Example GP"] * 3,
+            "LapTimeSeconds": [95.0, 93.0, 70.0],
+            "IsPitLap": [False] * 3,
+            "IsSafetyCar": [False] * 3,
+        })
+        result = apply_pre_race_baseline(target, history, 2024)
+        assert result.loc[0, "PreRaceBaseline"] == 93.0
+        assert result.loc[0, "BaselineSourceSeason"] == 2023
+        assert result.loc[0, "LapTimeDelta"] == -2.0
+
+    def test_app_only_exposes_races_with_pre_race_baselines(self):
+        df = app.load_features(app.APP_MODEL_SEASON)
+        assert df["PreRaceBaseline"].notna().all()
+        assert (df["RoundNumber"] > 0).all()
+
 
 class TestMetricsData:
     """Metric files must exist and be parseable."""
@@ -94,6 +117,18 @@ class TestMetricsData:
             model_metrics = json.load(f)["overall"]
         assert metrics[name] == model_metrics
 
+        predictions = pd.read_parquet(METRICS_DIR / f"predictions_{name}.parquet")
+        model = joblib.load(MODELS_DIR / f"{name}_model.joblib")
+        target = "LapTimeDelta" if "LapTimeDelta" in predictions.columns else "LapTimeSeconds"
+        X = predictions.drop(columns=[target, "LapTimeSeconds"], errors="ignore")
+        predicted = model.predict(X)
+        if target == "LapTimeDelta":
+            predicted = predicted + predictions["PreRaceBaseline"].to_numpy()
+        mae = np.mean(np.abs(predictions["LapTimeSeconds"].to_numpy() - predicted))
+        rmse = np.sqrt(np.mean((predictions["LapTimeSeconds"].to_numpy() - predicted) ** 2))
+        assert metrics[name]["mae"] == pytest.approx(mae)
+        assert metrics[name]["rmse"] == pytest.approx(rmse)
+
     def test_season_metrics_match_default_metrics(self):
         with open(METRICS_DIR / "metrics.json") as f:
             default_metrics = json.load(f)
@@ -120,6 +155,28 @@ class TestMetricsData:
         df = pd.read_parquet(path)
         assert "residual" in df.columns
         assert len(df) > 0
+        assert np.allclose(df["residual"], df["LapTimeSeconds"] - df["pred"])
+
+    def test_app_rejects_unsupported_model_seasons(self):
+        assert app.load_model("hgb", app.APP_MODEL_SEASON) is not None
+        assert app.load_model("hgb", app.APP_MODEL_SEASON - 1) is None
+        assert app.load_model_metrics(app.APP_MODEL_SEASON - 1) is None
+        assert app.load_residuals_cached("hgb", app.APP_MODEL_SEASON - 1) is None
+
+    def test_support_profile_penalizes_unobserved_tyre_life(self):
+        history = pd.DataFrame({
+            "Season": [2023] * 20,
+            "EventName": ["Example GP"] * 20,
+            "Compound": ["SOFT"] * 20,
+            "TyreLife": list(range(1, 21)),
+            "IsPitLap": [False] * 20,
+            "IsSafetyCar": [False] * 20,
+        })
+        profile = build_support_profile(history, 2024, quantile=1.0)
+        supported = assess_strategy_support([("SOFT", 18)], "Example GP", profile)
+        unsupported = assess_strategy_support([("SOFT", 25)], "Example GP", profile)
+        assert supported["unsupported_laps"] == 0
+        assert unsupported["unsupported_laps"] == 5
 
 
 class TestModelPredict:

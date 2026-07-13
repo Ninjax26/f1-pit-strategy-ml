@@ -45,7 +45,7 @@ NUMERIC_FEATURES = [
 ]
 
 # Columns never used as model inputs (bookkeeping / target columns)
-DROP_FROM_X = {"LapTimeSeconds", "LapTimeDelta", "RaceMedianLap", "Season",
+DROP_FROM_X = {"LapTimeSeconds", "LapTimeDelta", "RaceMedianLap", "PreRaceBaseline", "BaselineSourceSeason", "Season",
                "SessionName", "IsPitLap", "IsSafetyCar"}
 
 
@@ -191,10 +191,13 @@ def prepare_xy(
     if exclude_safety_cars and "IsSafetyCar" in df.columns:
         mask &= ~df["IsSafetyCar"]
     df = df[mask].copy()
+    if "PreRaceBaseline" not in df.columns:
+        raise ValueError("PreRaceBaseline is required for leakage-free generalization testing")
+    df = df[df["PreRaceBaseline"].notna()].copy()
 
     target = "LapTimeDelta" if "LapTimeDelta" in df.columns else "LapTimeSeconds"
     y = df[target]
-    race_median = df["RaceMedianLap"] if "RaceMedianLap" in df.columns else None
+    race_median = df["PreRaceBaseline"]
     y_seconds = df["LapTimeSeconds"] if "LapTimeSeconds" in df.columns else None
 
     drop_cols = DROP_FROM_X | {target}
@@ -237,15 +240,16 @@ def run_experiment(
     print(f"  {label}")
     print(f"  Train: {len(train_df):,} laps  |  Test: {len(test_df):,} laps")
 
-    unseen_tracks, n_unseen_rows = audit_unseen_tracks(train_df, test_df)
-    if unseen_tracks:
-        print(f"  Unseen tracks in test ({n_unseen_rows} rows): {sorted(unseen_tracks)}")
-    else:
-        print("  No unseen tracks in test set.")
-
     X_train, y_train, _, _ = prepare_xy(train_df)
     X_test, y_test, test_race_median, y_test_seconds = prepare_xy(test_df)
     target_is_delta = "LapTimeDelta" in test_df.columns
+
+    unseen_tracks, _ = audit_unseen_tracks(train_df, test_df)
+    n_unseen_rows = int(X_test["EventName"].isin(unseen_tracks).sum()) if "EventName" in X_test.columns else 0
+    if unseen_tracks:
+        print(f"  Unseen tracks in test ({n_unseen_rows} evaluated rows): {sorted(unseen_tracks)}")
+    else:
+        print("  No unseen tracks in test set.")
 
     preprocessor = build_preprocessor(X_train)
 
@@ -341,7 +345,7 @@ def main() -> None:
     df_train_e2, loaded_train_e2 = load_seasons(features_dir, [2021])
     df_test_e2, loaded_test_e2 = load_seasons(features_dir, [2022])
 
-    if loaded_train_e2 and loaded_test_e2:
+    if loaded_train_e2 and loaded_test_e2 and "PreRaceBaseline" in df_train_e2.columns:
         combined_e2 = pd.concat([df_train_e2, df_test_e2], ignore_index=True)
         train_df_e2, test_df_e2 = season_split(combined_e2, loaded_train_e2, loaded_test_e2)
         rows = run_experiment(
@@ -354,7 +358,7 @@ def main() -> None:
             r["test_set"] = "2022 (full season)"
         all_rows.extend(rows)
     else:
-        print("  SKIPPED Experiment 2: insufficient data (need 2021 + 2022).")
+        print("  SKIPPED Experiment 2: 2021 has no earlier-season baseline and cannot be evaluated leakage-free.")
 
     # ── Output ────────────────────────────────────────────────────────────────
     if not all_rows:
@@ -380,22 +384,15 @@ def main() -> None:
     print("="*80)
 
     # Interpretation hint
-    if len(all_rows) >= 6:
+    if len(all_rows) >= 4:
         base_hgb = next((r for r in all_rows if "Baseline" in r["experiment"] and r["model"] == "hgb"), None)
         e1_hgb = next((r for r in all_rows if "Exp1" in r["experiment"] and r["model"] == "hgb"), None)
-        e2_hgb = next((r for r in all_rows if "Exp2" in r["experiment"] and r["model"] == "hgb"), None)
-        if base_hgb and e1_hgb and e2_hgb:
+        if base_hgb and e1_hgb:
             gap_e1 = e1_hgb["mae"] - base_hgb["mae"]
-            gap_e2 = e2_hgb["mae"] - e1_hgb["mae"]
             print(textwrap.dedent(f"""
             INTERPRETATION (HGB):
               Baseline MAE:          {base_hgb['mae']:.3f}s
               Cross-season MAE:      {e1_hgb['mae']:.3f}s  (Δ +{gap_e1:.3f}s vs baseline)
-              Reg-shift MAE:         {e2_hgb['mae']:.3f}s  (Δ +{gap_e2:.3f}s vs cross-season)
-
-              The regulation-shift gap of {gap_e2:.3f}s reflects the 2022 rule change
-              (ground-effect aero + 18-inch tyres). Models trained on 2021 data learned
-              tire degradation curves for a fundamentally different car concept.
             """))
 
 

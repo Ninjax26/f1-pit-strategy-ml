@@ -1,11 +1,21 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+try:
+    from src.sim.support import assess_strategy_support
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.sim.support import assess_strategy_support
+
+
+SUPPORT_PENALTY_PER_LAP = 5.0
 
 
 def available_compounds(race_df: pd.DataFrame, include_wet: bool) -> list[str]:
@@ -159,14 +169,16 @@ def main() -> None:
 
     X = race_df.drop(columns=["LapTimeSeconds", "LapTimeDelta"], errors="ignore")
     preds = model.predict(X)
-    if "LapTimeDelta" in race_df.columns and "RaceMedianLap" in race_df.columns:
-        preds = preds + race_df["RaceMedianLap"].to_numpy()
+    if "LapTimeDelta" in race_df.columns and "PreRaceBaseline" in race_df.columns:
+        preds = preds + race_df["PreRaceBaseline"].to_numpy()
 
     actual_total = float(race_df["LapTimeSeconds"].sum())
     pred_total = float(np.sum(preds))
 
     pit_loss = load_pit_loss(Path(args.metrics_dir) / f"pit_loss_{args.season}.csv", args.round)
     pit_loss = pit_loss if pit_loss is not None else 20.0
+    support_path = Path(args.metrics_dir) / f"strategy_support_{args.season}.json"
+    support_profile = json.loads(support_path.read_text()) if support_path.exists() else None
 
     compounds = available_compounds(race_df, args.include_wet)
     strategies = generate_strategies(
@@ -184,11 +196,19 @@ def main() -> None:
         sim_laps = build_laps(race_df, strategy)
         X_sim = sim_laps.drop(columns=["LapTimeSeconds", "LapTimeDelta"], errors="ignore")
         sim_preds = model.predict(X_sim)
-        if "LapTimeDelta" in sim_laps.columns and "RaceMedianLap" in sim_laps.columns:
-            sim_preds = sim_preds + sim_laps["RaceMedianLap"].to_numpy()
+        if "LapTimeDelta" in sim_laps.columns and "PreRaceBaseline" in sim_laps.columns:
+            sim_preds = sim_preds + sim_laps["PreRaceBaseline"].to_numpy()
         total_time = float(np.sum(sim_preds)) + pit_loss * (len(strategy) - 1)
-        record = {"name": name, "total_time_s": total_time, "strategy": strategy}
-        if best is None or total_time < best["total_time_s"]:
+        support = assess_strategy_support(strategy, race_df["EventName"].iloc[0], support_profile)
+        risk_adjusted_time = total_time + support["unsupported_laps"] * SUPPORT_PENALTY_PER_LAP
+        record = {
+            "name": name,
+            "total_time_s": total_time,
+            "risk_adjusted_time_s": risk_adjusted_time,
+            "unsupported_laps": support["unsupported_laps"],
+            "strategy": strategy,
+        }
+        if best is None or risk_adjusted_time < best["risk_adjusted_time_s"]:
             best = record
 
     out_report = Path(args.out_report)
@@ -216,6 +236,8 @@ def main() -> None:
         report_lines.append("")
         report_lines.append("## Best Simulated Strategy")
         report_lines.append(f"- {best['name']} | total predicted time (s): {best['total_time_s']:.2f}")
+        report_lines.append(f"- Conservative score (s): {best['risk_adjusted_time_s']:.2f}")
+        report_lines.append(f"- Unsupported tyre-life laps: {best['unsupported_laps']}")
         report_lines.append(f"- Stints: {best['strategy']}")
 
     out_report.write_text("\n".join(report_lines))

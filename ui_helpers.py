@@ -137,7 +137,8 @@ def render_best_strategy(best_row, n_sims: int, total_laps: int):
     if is_mc:
         p10 = format_race_time(best_row.get("total_time_p10_s", 0))
         p90 = format_race_time(best_row.get("total_time_p90_s", 0))
-        detail = f'<div class="strat-detail">Confidence range: {p10} — {p90} (P10–P90)</div>'
+        risk_score = format_race_time(best_row.get("risk_adjusted_time_s", time_val))
+        detail = f'<div class="strat-detail">Outcome range: {p10} — {p90} (P10–P90) · Conservative score: {risk_score}</div>'
 
     st.markdown(f"""
     <div class="best-strategy-card">
@@ -155,7 +156,7 @@ def render_best_strategy(best_row, n_sims: int, total_laps: int):
 def generate_insights(results: pd.DataFrame, n_sims: int) -> list[str]:
     insights = []
     is_mc = n_sims > 1
-    time_key = "total_time_mean_s" if is_mc else "total_time_s"
+    time_key = "risk_adjusted_time_s"
 
     if len(results) < 2:
         return insights
@@ -163,7 +164,7 @@ def generate_insights(results: pd.DataFrame, n_sims: int) -> list[str]:
     best = results.iloc[0]
     second = results.iloc[1]
     gap = second[time_key] - best[time_key]
-    insights.append(f"The optimal strategy saves {gap:.1f}s ({format_race_time(gap)}) over the next best option.")
+    insights.append(f"The top strategy leads the next option by {gap:.1f}s on the conservative ranking score.")
 
     stop_counts = results.head(5)["stops"].value_counts()
     dominant = stop_counts.idxmax()
@@ -193,20 +194,22 @@ def render_strategy_table(results: pd.DataFrame, n_sims: int, total_laps: int):
 
     if is_mc:
         display["Rank"] = range(1, len(display) + 1)
-        best_time = display["total_time_mean_s"].iloc[0]
-        display["Delta to Best"] = display["total_time_mean_s"] - best_time
+        best_time = display["risk_adjusted_time_s"].iloc[0]
+        display["Delta to Best"] = display["risk_adjusted_time_s"] - best_time
         display["Mean Time"] = display["total_time_mean_s"].apply(format_race_time)
+        display["Conservative Score"] = display["risk_adjusted_time_s"].apply(format_race_time)
         display["P10"] = display["total_time_p10_s"].apply(format_race_time)
         display["P90"] = display["total_time_p90_s"].apply(format_race_time)
         display["Delta"] = display["Delta to Best"].apply(lambda x: f"+{x:.1f}s" if x > 0 else "—")
-        show_cols = ["Rank", "strategy", "stops", "Mean Time", "P10", "P90", "Delta"]
+        show_cols = ["Rank", "strategy", "stops", "Mean Time", "Conservative Score", "P10", "P90", "unsupported_laps", "Delta"]
     else:
         display["Rank"] = range(1, len(display) + 1)
-        best_time = display["total_time_s"].iloc[0]
-        display["Delta to Best"] = display["total_time_s"] - best_time
+        best_time = display["risk_adjusted_time_s"].iloc[0]
+        display["Delta to Best"] = display["risk_adjusted_time_s"] - best_time
         display["Total Time"] = display["total_time_s"].apply(format_race_time)
+        display["Conservative Score"] = display["risk_adjusted_time_s"].apply(format_race_time)
         display["Delta"] = display["Delta to Best"].apply(lambda x: f"+{x:.1f}s" if x > 0 else "—")
-        show_cols = ["Rank", "strategy", "stops", "Total Time", "Delta"]
+        show_cols = ["Rank", "strategy", "stops", "Total Time", "Conservative Score", "unsupported_laps", "Delta"]
 
     def highlight_best(row):
         if row.name == 0:
@@ -219,7 +222,7 @@ def render_strategy_table(results: pd.DataFrame, n_sims: int, total_laps: int):
 
 def render_recommendation_explanation(best_row, results: pd.DataFrame, n_sims: int):
     is_mc = n_sims > 1
-    time_key = "total_time_mean_s" if is_mc else "total_time_s"
+    time_key = "risk_adjusted_time_s"
     if results.empty:
         return
 
@@ -235,7 +238,7 @@ def render_recommendation_explanation(best_row, results: pd.DataFrame, n_sims: i
         uncertainty_spread = p90 - p10
 
     bullets = []
-    bullets.append(f"This strategy has the lowest {'expected race time' if is_mc else 'predicted race time'} among the evaluated options.")
+    bullets.append("This strategy has the lowest conservative score after expected time, uncertainty, and historical-support penalties are considered.")
     bullets.append(f"It uses {best_row['stops']} stop{'s' if best_row['stops'] != 1 else ''}, which keeps the pit-loss overhead in line with the other candidates.")
     if second_time is not None and spread is not None:
         bullets.append(f"It beats the next-best option by {spread:.1f}s, so it remains ahead even after accounting for the ranking gap.")
@@ -248,6 +251,8 @@ def render_recommendation_explanation(best_row, results: pd.DataFrame, n_sims: i
             bullets.append("Its P10–P90 range is wider, so the recommendation is more sensitive to simulation noise and uncertainty.")
     if is_mc and "pit_loss_mean_s" in best_row.index:
         bullets.append(f"The simulation includes pit-loss variability with an average pit-loss contribution of {best_row['pit_loss_mean_s']:.1f}s.")
+    if best_row.get("unsupported_laps", 0) == 0:
+        bullets.append("Every stint remains within the historical tyre-life support limit used by the simulator.")
 
     st.markdown("#### Why was this strategy recommended?")
     st.markdown("<ul style='color:#d0d0d0;line-height:1.7;margin-top:0.4rem;'>" + "".join(f"<li>{b}</li>" for b in bullets[:6]) + "</ul>", unsafe_allow_html=True)

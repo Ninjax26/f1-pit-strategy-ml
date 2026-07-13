@@ -52,7 +52,7 @@ Modern Formula 1 strategy decisions depend on balancing tyre degradation, weathe
 | ✏️ **Custom Strategy Input** | Test any user-defined pit plan (e.g. `SOFT:18,MEDIUM:22,HARD:20`) |
 | 🎲 **Monte Carlo Simulation** | Up to 2,000 simulations per strategy with residual-based lap noise and pit loss sampling. [Read more](docs/MONTE_CARLO.md) |
 | 🧠 **Machine Learning Prediction** | Dual-model training (Ridge + HistGradientBoosting) with rolling train/test splits. [Read more](docs/ML_PIPELINE.md) |
-| 🔬 **Feature Engineering** | Race-normalised lap delta target, safety-car flags, pit-lap flags, and weather features |
+| 🔬 **Feature Engineering** | Prior-season circuit baseline, lap-time delta target, safety-car flags, pit-lap flags, and weather features |
 | 📥 **CSV Export** | Download Monte Carlo simulation results as CSV |
 | 🧭 **Explainability** | Model Performance tab now includes rolling MAE, compound/round diagnostics, and feature importance artifacts |
 
@@ -77,7 +77,7 @@ Modern Formula 1 strategy decisions depend on balancing tyre degradation, weathe
 |---|---|
 | **HistGradientBoosting** | Better performance on nonlinear tabular data compared to standard regressors |
 | **Ridge Regression** | Baseline for comparison |
-| **Monte Carlo** | Model uncertainty instead of single predictions |
+| **Monte Carlo** | Outcome distributions plus conservative risk-adjusted strategy ranking |
 | **Streamlit** | Rapid interactive prototyping and deployment |
 | **Parquet** | Faster loading and smaller storage than CSV |
 
@@ -113,10 +113,12 @@ Models are trained on **Rounds 1–16** (Bahrain → Italy) and evaluated on **R
 
 | Model | MAE (s) | RMSE (s) |
 |---|---|---|
-| **HGB (HistGradientBoosting)** | **1.49** | **2.30** |
-| Ridge Regression | 3.74 | 4.91 |
+| **HGB (HistGradientBoosting)** | **1.75** | **2.80** |
+| Ridge Regression | 3.17 | 3.98 |
 
 _MAE and RMSE measure error relative to the true absolute lap time._
+
+These results use a leakage-free `PreRaceBaseline`: the latest available earlier-season median for the same circuit. The completed test race is never used to reconstruct its absolute lap times. This is deliberately harder—and more representative—than evaluation against the completed race's own median.
 
 ### Latest Evaluation Artifacts
 
@@ -124,17 +126,18 @@ _MAE and RMSE measure error relative to the true absolute lap time._
 - `data/metrics/feature_importance_hgb.csv` stores permutation feature importance for HGB
 - `data/metrics/rolling_metrics_hgb.json` and `data/metrics/rolling_metrics_ridge.json` store rolling validation results
 - `data/metrics/predictions_hgb.parquet` and `data/metrics/predictions_ridge.parquet` store per-lap predictions and residuals used by Monte Carlo noise sampling
+- `data/metrics/strategy_support_2024.json` stores prior-season tyre-life support limits used to penalize weak counterfactuals
 
 ### Case Study — Max Verstappen, Round 14 (Belgian GP)
 
-In the Belgian GP case study, the simulator recommended a one-stop Medium → Hard strategy with a pit window comparable to the actual race strategy, demonstrating that the approach can generate realistic strategy recommendations under historical race conditions.
+In the Belgian GP retrospective case study, the conservative score recommends a supported two-stop Medium → Hard → Hard strategy. Round 14 is part of the training window, so this is a product demonstration rather than holdout validation.
 
 ### Current App Behavior
 
 - Streamlit dashboard with separate `Dashboard`, `Strategy Simulator`, and `Model Performance` tabs
 - Sidebar tooltips for each simulation control
-- Auto-run toggle for faster iteration during demo sessions
 - Monte Carlo outputs mean and P10/P50/P90 strategy time bands when multiple simulations are enabled
+- Conservative ranking combines expected time, upper-tail uncertainty, and penalties for tyre life beyond historical support
 
 ## 📊 Generated Evaluation Plots
 
@@ -157,8 +160,9 @@ python src/plots/make_plots.py --model hgb
 ## ⚠️ Known Limitations
 
 - Wet-weather laps show much higher MAE than dry-weather laps. The model is much more reliable for dry-race strategy decisions than for wet-race calls without a dedicated wet-weather model.
-- Round 21 (Las Vegas) shows an MAE spike compared with the rest of the season, which is worth investigating for unusual track conditions, safety-car effects, or data-quality issues.
+- The 2024 Chinese GP is not exposed in the app because no 2021–2023 race exists from which to construct a leakage-free circuit baseline.
 - The simulator still relies on historical lap-time patterns and sampled residuals, so it does not explicitly model live traffic, safety-car timing, or overtakes.
+- Historical-support penalties reduce unsafe extrapolation but do not turn observational race data into a fully causal model.
 
 ---
 

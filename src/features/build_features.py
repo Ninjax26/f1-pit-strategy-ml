@@ -86,6 +86,8 @@ def build_feature_df(df: pd.DataFrame, exclude_safety_cars: bool = False) -> pd.
         "IsPitLap",
         "IsSafetyCar",
         "RaceMedianLap",
+        "PreRaceBaseline",
+        "BaselineSourceSeason",
         "LapTimeDelta",
     ]
     keep_cols = [c for c in keep_cols if c in df.columns]
@@ -98,6 +100,52 @@ def build_feature_df(df: pd.DataFrame, exclude_safety_cars: bool = False) -> pd.
 
     df = df.dropna(subset=["LapTimeSeconds"])
     return df
+
+
+def apply_pre_race_baseline(df: pd.DataFrame, history_df: pd.DataFrame, target_season: int) -> pd.DataFrame:
+    """Create an absolute-time baseline using only seasons before the target season."""
+    result = df.copy()
+    history = history_df.copy()
+    if "Season" not in history.columns or "EventName" not in history.columns:
+        raise ValueError("Historical features must contain Season and EventName")
+
+    history = history[history["Season"] < target_season]
+    if "IsPitLap" in history.columns:
+        history = history[~history["IsPitLap"]]
+    if "IsSafetyCar" in history.columns:
+        history = history[~history["IsSafetyCar"]]
+    history = history.dropna(subset=["EventName", "LapTimeSeconds"])
+
+    race_baselines = (
+        history.groupby(["Season", "EventName"], as_index=False)["LapTimeSeconds"]
+        .median()
+        .sort_values("Season")
+        .drop_duplicates("EventName", keep="last")
+    )
+    baseline_map = race_baselines.set_index("EventName")["LapTimeSeconds"]
+    source_map = race_baselines.set_index("EventName")["Season"]
+    result["PreRaceBaseline"] = result["EventName"].map(baseline_map)
+    result["BaselineSourceSeason"] = result["EventName"].map(source_map).astype("Int64")
+    result["LapTimeDelta"] = result["LapTimeSeconds"] - result["PreRaceBaseline"]
+    return result
+
+
+def load_prior_feature_history(features_dir: Path, target_season: int) -> pd.DataFrame:
+    frames = []
+    for path in sorted(features_dir.glob("features_*.parquet")):
+        suffix = path.stem.removeprefix("features_")
+        if not suffix.isdigit() or int(suffix) >= target_season:
+            continue
+        frame = pd.read_parquet(path)
+        if "Season" not in frame.columns:
+            frame["Season"] = int(suffix)
+        frames.append(frame)
+    if not frames:
+        raise RuntimeError(
+            f"No prior-season feature files found in {features_dir}. "
+            "A leakage-free pre-race baseline requires at least one earlier season."
+        )
+    return pd.concat(frames, ignore_index=True)
 
 
 def main() -> None:
@@ -141,6 +189,11 @@ def main() -> None:
     print(f"Total raw laps across all seasons: {len(df):,}")
 
     df = build_feature_df(df, exclude_safety_cars=args.exclude_safety_cars)
+    if len(season_list) == 1:
+        history_df = load_prior_feature_history(out_root, season_list[0])
+        df = apply_pre_race_baseline(df, history_df, season_list[0])
+        supported = int(df["PreRaceBaseline"].notna().sum())
+        print(f"Pre-race baseline available for {supported:,}/{len(df):,} laps")
     print(f"Total laps after feature engineering: {len(df):,}")
 
     # Output path: single season → features_YYYY.parquet (original name),

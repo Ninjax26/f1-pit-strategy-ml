@@ -21,12 +21,16 @@ from ui_helpers import (
     render_feature_importance, render_recommendation_explanation,
 )
 from three_components import render_live_telemetry, render_simulation_loader
+from src.sim.support import assess_strategy_support
 
 DATA_DIR = Path("data")
 FEATURES_DIR = DATA_DIR / "features"
 MODELS_DIR = DATA_DIR / "models"
 METRICS_DIR = DATA_DIR / "metrics"
 FIGURES_DIR = Path("figures")
+APP_MODEL_SEASON = 2024
+RISK_AVERSION = 0.25
+SUPPORT_PENALTY_PER_LAP = 5.0
 
 st.set_page_config(page_title="F1 Strategy Simulator", layout="wide", initial_sidebar_state="expanded")
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -176,6 +180,8 @@ def build_race_template(
         "IsPitLap",
         "IsSafetyCar",
         "RaceMedianLap",
+        "PreRaceBaseline",
+        "BaselineSourceSeason",
         "LapTimeDelta",
     ]:
         if column == "Season":
@@ -217,6 +223,9 @@ def build_race_template(
     if "RaceMedianLap" in template.columns:
         race_median = round_df["RaceMedianLap"].dropna().iloc[0] if round_df["RaceMedianLap"].dropna().size else np.nan
         template["RaceMedianLap"] = race_median
+    if "PreRaceBaseline" in template.columns:
+        baseline = round_df["PreRaceBaseline"].dropna()
+        template["PreRaceBaseline"] = baseline.iloc[0] if not baseline.empty else np.nan
     return template
 
 
@@ -304,12 +313,20 @@ def sample_residual(compound, residuals, rng):
 @st.cache_data(show_spinner=False)
 def load_features(season):
     path = FEATURES_DIR / f"features_{season}.parquet"
-    return pd.read_parquet(path) if path.exists() else None
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    if int(season) == APP_MODEL_SEASON:
+        df = df[df["PreRaceBaseline"].notna()].copy()
+        df = df[df["RoundNumber"] > 0].copy()
+    return df
 
 
 @st.cache_resource(show_spinner=False)
-def load_model(model_name):
+def load_model(model_name, season=APP_MODEL_SEASON):
     import sklearn
+    if int(season) != APP_MODEL_SEASON:
+        return None
     path = MODELS_DIR / f"{model_name}_model.joblib"
     meta_path = MODELS_DIR / f"model_meta_{model_name}.json"
     if not path.exists():
@@ -333,41 +350,56 @@ def load_model(model_name):
 
 
 @st.cache_data(show_spinner=False)
-def load_residuals_cached(model_name):
+def load_residuals_cached(model_name, season=APP_MODEL_SEASON):
+    if int(season) != APP_MODEL_SEASON:
+        return None
     return load_residuals(METRICS_DIR / f"predictions_{model_name}.parquet")
 
 
 @st.cache_data(show_spinner=False)
 def load_model_metrics(season):
-    for path in (
-        METRICS_DIR / f"metrics_{season}.json",
-        METRICS_DIR / "metrics.json",
-    ):
-        if path.exists():
-            with open(path) as f:
-                payload = json.load(f)
-            model_metrics = {}
-            for model_name in ("hgb", "ridge"):
-                metrics = payload.get(model_name)
-                if not isinstance(metrics, dict):
-                    continue
-                if isinstance(metrics.get("overall"), dict):
-                    metrics = metrics["overall"]
-                if metrics.get("mae") is not None and metrics.get("rmse") is not None:
-                    model_metrics[model_name] = metrics
-            return model_metrics or None
-    return None
+    if int(season) != APP_MODEL_SEASON:
+        return None
+    path = METRICS_DIR / f"metrics_{season}.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        payload = json.load(f)
+    model_metrics = {}
+    for model_name in ("hgb", "ridge"):
+        metrics = payload.get(model_name)
+        if not isinstance(metrics, dict):
+            continue
+        if isinstance(metrics.get("overall"), dict):
+            metrics = metrics["overall"]
+        if metrics.get("mae") is not None and metrics.get("rmse") is not None:
+            model_metrics[model_name] = metrics
+    return model_metrics or None
 
 
-def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_loss_mode, residuals, noise_sigma, seed):
+@st.cache_data(show_spinner=False)
+def load_support_profile(season):
+    path = METRICS_DIR / f"strategy_support_{season}.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def simulate_strategies(
+    race_df, model, strategies, pit_loss_stats, n_sims, pit_loss_mode,
+    residuals, noise_sigma, seed, support_profile=None, event_name="",
+):
     rng = np.random.default_rng(seed)
     results = []
-    target_is_delta = "LapTimeDelta" in race_df.columns and "RaceMedianLap" in race_df.columns
-    race_median = race_df["RaceMedianLap"].iloc[0] if "RaceMedianLap" in race_df.columns else race_df["LapTimeSeconds"].median()
+    target_is_delta = "LapTimeDelta" in race_df.columns and "PreRaceBaseline" in race_df.columns
+    race_median = race_df["PreRaceBaseline"].iloc[0] if "PreRaceBaseline" in race_df.columns else race_df["LapTimeSeconds"].median()
     if n_sims <= 1:
         pit_loss_mode = "fixed"
 
     for name, strategy in strategies.items():
+        support = assess_strategy_support(strategy, event_name, support_profile)
+        support_penalty = support["unsupported_laps"] * SUPPORT_PENALTY_PER_LAP
         laps = build_laps(race_df, strategy)
         X = laps.drop(columns=["LapTimeSeconds", "LapTimeDelta"], errors="ignore")
         base_preds = model.predict(X)
@@ -378,7 +410,17 @@ def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_
         if n_sims <= 1:
             pit_loss_value = sample_pit_loss(pit_loss_stats, rng, pit_loss_mode)
             total_time = float(np.sum(base_preds)) + pit_loss_value * n_stops
-            results.append({"strategy": name, "total_time_s": total_time, "pit_loss_s": pit_loss_value, "stops": n_stops, "stints": json.dumps(strategy)})
+            results.append({
+                "strategy": name,
+                "total_time_s": total_time,
+                "risk_adjusted_time_s": total_time + support_penalty,
+                "support_penalty_s": support_penalty,
+                "unsupported_laps": support["unsupported_laps"],
+                "support_source": support["support_source"],
+                "pit_loss_s": pit_loss_value,
+                "stops": n_stops,
+                "stints": json.dumps(strategy),
+            })
         else:
             totals, pit_losses = [], []
             compounds = laps.get("Compound", pd.Series([None] * len(laps)))
@@ -392,33 +434,37 @@ def simulate_strategies(race_df, model, strategies, pit_loss_stats, n_sims, pit_
                 pit_losses.append(pit_total)
                 totals.append(float(np.sum(lap_preds)) + pit_total)
             totals_arr = np.array(totals, dtype=float)
+            mean_time = float(np.mean(totals_arr))
+            p90_time = float(np.quantile(totals_arr, 0.90))
+            uncertainty_penalty = RISK_AVERSION * max(0.0, p90_time - mean_time)
             results.append({
                 "strategy": name,
-                "total_time_mean_s": float(np.mean(totals_arr)),
+                "total_time_mean_s": mean_time,
                 "total_time_p10_s": float(np.quantile(totals_arr, 0.10)),
                 "total_time_p50_s": float(np.quantile(totals_arr, 0.50)),
-                "total_time_p90_s": float(np.quantile(totals_arr, 0.90)),
+                "total_time_p90_s": p90_time,
+                "risk_adjusted_time_s": mean_time + uncertainty_penalty + support_penalty,
+                "uncertainty_penalty_s": uncertainty_penalty,
+                "support_penalty_s": support_penalty,
+                "unsupported_laps": support["unsupported_laps"],
+                "support_source": support["support_source"],
                 "pit_loss_mean_s": float(np.mean(pit_losses)) if pit_losses else 0.0,
                 "stops": n_stops,
                 "stints": json.dumps(strategy),
             })
 
-    key = "total_time_mean_s" if n_sims > 1 else "total_time_s"
-    return pd.DataFrame(results).sort_values(key)
+    return pd.DataFrame(results).sort_values("risk_adjusted_time_s").reset_index(drop=True)
 
 
 # --- UI ---
 
 render_hero()
 
-season = st.sidebar.number_input(
+season = st.sidebar.selectbox(
     "Season",
-    value=2024,
-    step=1,
-    min_value=2018,
-    max_value=2026,
+    [APP_MODEL_SEASON],
     key="season",
-    help="Choose the season to load. This changes which historical feature set and model metrics are available in the app.",
+    help="The deployed models and simulation artifacts are currently trained and evaluated for the 2024 season.",
 )
 features_df = load_features(int(season))
 if features_df is None:
@@ -426,6 +472,7 @@ if features_df is None:
     st.stop()
 
 model_metrics = load_model_metrics(int(season))
+support_profile = load_support_profile(int(season))
 
 tab_dashboard, tab_simulator, tab_model = st.tabs(["Dashboard", "Strategy Simulator", "Model Performance"])
 
@@ -520,7 +567,7 @@ with tab_simulator:
         key="model",
         help="Choose which trained regressor to use for lap-time prediction. HGB is the default because it usually captures nonlinear tyre degradation better than the Ridge baseline.",
     )
-    model = load_model(model_name)
+    model = load_model(model_name, int(season))
     if model is None:
         import sklearn
         model_path = MODELS_DIR / f"{model_name}_model.joblib"
@@ -648,7 +695,7 @@ with tab_simulator:
         key="use_residuals",
         help="When enabled, the simulator uses residuals from the evaluation set for lap-by-lap noise. When disabled, it falls back to Gaussian noise controlled by Noise Sigma.",
     )
-    residuals = load_residuals_cached(model_name) if use_residuals else None
+    residuals = load_residuals_cached(model_name, int(season)) if use_residuals else None
     custom_strategy = st.sidebar.text_input(
         "Custom Strategy",
         value="",
@@ -692,6 +739,7 @@ with tab_simulator:
                     pit_loss_stats=pit_loss_stats, n_sims=n_sims, pit_loss_mode=pit_loss_mode,
                     residuals=residuals, noise_sigma=noise_sigma if not use_residuals else None,
                     seed=int(seed) if seed is not None else None,
+                    support_profile=support_profile, event_name=event_name,
                 )
 
                 st.success(f"Simulated {len(results)} strategies x {n_sims} runs each")
@@ -711,7 +759,7 @@ with tab_simulator:
                     st.markdown("#### Strategy Comparison")
                     is_mc = n_sims > 1
                     chart_df = results.head(12).copy()
-                    time_key = "total_time_mean_s" if is_mc else "total_time_s"
+                    time_key = "risk_adjusted_time_s"
                     best_time = chart_df[time_key].min()
                     chart_df["delta"] = chart_df[time_key] - best_time
 
@@ -720,12 +768,13 @@ with tab_simulator:
                     )
                     bars = base.mark_bar(cornerRadiusEnd=6, color="#e10600", height=16).encode(
                         x=alt.X("delta:Q", title="Time delta to best strategy (seconds)"),
-                        tooltip=["strategy", alt.Tooltip(f"{time_key}:Q", title="Total Time", format=".1f"),
-                                 alt.Tooltip("delta:Q", title="Delta to best", format=".1f"), "stops"],
+                        tooltip=["strategy", alt.Tooltip(f"{time_key}:Q", title="Conservative Score", format=".1f"),
+                                 alt.Tooltip("delta:Q", title="Delta to best", format=".1f"), "stops", "unsupported_laps"],
                     )
                     if is_mc and "total_time_p10_s" in chart_df.columns:
-                        chart_df["err_low"] = chart_df["total_time_p10_s"] - best_time
-                        chart_df["err_high"] = chart_df["total_time_p90_s"] - best_time
+                        risk_shift = chart_df["risk_adjusted_time_s"] - chart_df["total_time_mean_s"]
+                        chart_df["err_low"] = chart_df["total_time_p10_s"] + risk_shift - best_time
+                        chart_df["err_high"] = chart_df["total_time_p90_s"] + risk_shift - best_time
                         whiskers = alt.Chart(chart_df).mark_rule(color="#ff6666", strokeWidth=2).encode(
                             y=alt.Y("strategy:N", sort=alt.EncodingSortField(field="delta", order="ascending")),
                             x="err_low:Q", x2="err_high:Q",

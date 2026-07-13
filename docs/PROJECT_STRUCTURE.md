@@ -13,12 +13,13 @@ f1/
 │   ├── data/
 │   │   └── pull_2024_races.py        # FastF1 data fetcher — saves laps.parquet per race
 │   ├── features/
-│   │   └── build_features.py         # Cleaning, flagging, delta target, feature selection
+│   │   └── build_features.py         # Cleaning, prior-season baseline, delta target, feature selection
 │   ├── models/
 │   │   ├── train_models.py           # Ridge + HGB training with sklearn Pipelines
 │   │   └── evaluate.py               # Standard + rolling evaluation, group metrics, residual export
 │   └── sim/
 │       ├── compute_pit_loss.py       # Per-race pit-stop time cost estimation
+│       ├── support.py                # Prior-season counterfactual support profiles
 │       └── strategy_sim.py           # CLI strategy simulator (Monte Carlo, strategy enumeration)
 │
 ├── data/
@@ -39,6 +40,7 @@ f1/
 │       ├── mae_by_round_{model}.csv
 │       ├── mae_by_stint_{model}.csv
 │       ├── rolling_metrics_{model}.json
+│       ├── strategy_support_2024.json # Historical tyre-life support limits
 │       └── pit_loss_2024.csv         # Pit-stop time cost distribution per race
 │
 ├── figures/                  # Pre-generated evaluation plots (PNG)

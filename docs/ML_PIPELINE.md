@@ -11,13 +11,18 @@ src/data/pull_2024_races.py
 src/features/build_features.py
     │  Drops deleted laps and rows with no LapTime
     │  Flags pit laps (PitInTime/PitOutTime) and safety-car laps (TrackStatus 4/5)
-    │  Computes race-level median pace → LapTimeDelta target
+    │  Uses the latest prior-season circuit median → PreRaceBaseline
+    │  Computes LapTimeDelta without using the completed target race
     │  Saves: data/features/features_2024.parquet
     ▼
 src/sim/compute_pit_loss.py
     │  Estimates pit-stop time cost per race from raw lap data
     │  Uses robust median filtering (5th–95th percentile, 5–60s bounds)
     │  Saves: data/metrics/pit_loss_2024.csv
+    ▼
+src/sim/support.py
+    │  Builds per-circuit and global tyre-life support limits from prior seasons
+    │  Saves: data/metrics/strategy_support_2024.json
     ▼
 src/models/train_models.py
     │  Loads feature parquet, applies train/test round split (Rounds 1–16 / 17–24)
@@ -43,6 +48,7 @@ Monte Carlo Simulation (in app.py)
     │  For n_sims > 1: samples residual noise per lap (from predictions_{model}.parquet)
     │                   samples pit loss from per-race Normal distribution
     │  Aggregates total race time → mean, P10, P50, P90 across simulations
+    │  Adds upper-tail uncertainty and historical-support penalties
     ▼
 Strategy Rankings  →  displayed in UI / downloadable as CSV
 ```
