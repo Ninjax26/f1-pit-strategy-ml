@@ -63,9 +63,11 @@ def estimate_pit_loss(df: pd.DataFrame) -> dict:
     else:
         for driver, ddf in df.groupby("Driver"):
             ddf = ddf.sort_values("LapNumber")
-            base = clean[clean["Driver"] == driver]["LapTimeSeconds"].median()
-            if np.isnan(base):
+            clean_driver = clean[clean["Driver"] == driver]
+            clean_driver_laps = clean_driver["LapTimeSeconds"].dropna()
+            if clean_driver_laps.empty:
                 continue
+            fallback_base = clean_driver_laps.median()
             pit_in = ddf[ddf["PitInTime"].notna()] if "PitInTime" in ddf.columns else ddf.iloc[0:0]
             if pit_in.empty:
                 continue
@@ -74,6 +76,10 @@ def estimate_pit_loss(df: pd.DataFrame) -> dict:
                 out_lap = ddf[ddf["LapNumber"] == next_lap_number]
                 if out_lap.empty or ("PitOutTime" in out_lap.columns and out_lap["PitOutTime"].isna().all()):
                     continue
+                local = clean_driver[
+                    clean_driver["LapNumber"].between(int(in_lap["LapNumber"]) - 3, next_lap_number + 3)
+                ]["LapTimeSeconds"].dropna()
+                base = local.median() if len(local) >= 3 else fallback_base
                 loss = (in_lap["LapTimeSeconds"] + out_lap.iloc[0]["LapTimeSeconds"]) - 2 * base
                 if pd.notna(loss):
                     losses.append(loss)

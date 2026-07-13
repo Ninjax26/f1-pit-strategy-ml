@@ -19,7 +19,7 @@ Build an ML model to predict lap time and use it to simulate pit strategies for 
 
 ## Case Study (Max Verstappen, Round 14)
 - Retrospective demonstration: **2-stop M→H→H**
-- Predicted total time and conservative score: **~4801.7s**, with no unsupported tyre-life laps
+- Predicted total time and conservative score: **~4799.9s**, with no unsupported tyre-life laps
 
 ## Deliverables
 - Trained models, evaluation metrics, plots, and case study report

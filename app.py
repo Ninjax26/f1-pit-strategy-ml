@@ -22,6 +22,8 @@ from ui_helpers import (
 )
 from three_components import render_live_telemetry, render_simulation_loader
 from src.sim.support import assess_strategy_support
+from src.sim.strategies import available_compounds, build_laps, generate_strategies, parse_strategy, validate_strategy
+from src.sim.uncertainty import load_residuals, sample_residual_series
 
 DATA_DIR = Path("data")
 FEATURES_DIR = DATA_DIR / "features"
@@ -69,74 +71,6 @@ elif _health["status"] == "version_mismatch":
 
 
 # --- Simulation logic ---
-
-def parse_strategy(spec: str) -> list[tuple[str, int]]:
-    stints = []
-    for part in spec.split(","):
-        compound, length = part.split(":")
-        stints.append((compound.strip().upper(), int(length)))
-    return stints
-
-
-def available_compounds(race_df: pd.DataFrame, include_wet: bool) -> list[str]:
-    compounds = sorted(set(race_df.get("Compound", pd.Series([])).astype(str).str.upper().dropna()))
-    dry = [c for c in compounds if c in {"SOFT", "MEDIUM", "HARD"}]
-    wet = [c for c in compounds if c not in {"SOFT", "MEDIUM", "HARD"}]
-    if include_wet:
-        return dry + wet if dry else wet
-    return dry if dry else compounds
-
-
-def generate_strategies(total_laps, compounds, max_stops, min_stint, max_stint, step, require_two_compounds):
-    strategies = {}
-    if max_stint <= 0:
-        max_stint = total_laps
-    if max_stops <= 0:
-        if not require_two_compounds:
-            for c1 in compounds:
-                strategies[f"0stop_{c1[0]}_{total_laps}"] = [(c1, total_laps)]
-        return strategies
-    if max_stops >= 1:
-        for c1 in compounds:
-            for c2 in compounds:
-                if require_two_compounds and c1 == c2:
-                    continue
-                for s1 in range(min_stint, total_laps - min_stint + 1, step):
-                    s2 = total_laps - s1
-                    if s2 < min_stint or s2 > max_stint:
-                        continue
-                    strategies[f"1stop_{c1[0]}-{c2[0]}_{s1}-{s2}"] = [(c1, s1), (c2, s2)]
-    if max_stops >= 2:
-        for c1 in compounds:
-            for c2 in compounds:
-                for c3 in compounds:
-                    if require_two_compounds and len({c1, c2, c3}) < 2:
-                        continue
-                    for s1 in range(min_stint, total_laps - 2 * min_stint + 1, step):
-                        for s2 in range(min_stint, total_laps - s1 - min_stint + 1, step):
-                            s3 = total_laps - s1 - s2
-                            if s3 < min_stint or s3 > max_stint:
-                                continue
-                            strategies[f"2stop_{c1[0]}-{c2[0]}-{c3[0]}_{s1}-{s2}-{s3}"] = [(c1, s1), (c2, s2), (c3, s3)]
-    return strategies
-
-
-def build_laps(base_laps, strategy):
-    laps = base_laps.copy().reset_index(drop=True)
-    lap_idx, stint_idx = 0, 1
-    for compound, length in strategy:
-        for i in range(length):
-            if lap_idx >= len(laps):
-                break
-            laps.loc[lap_idx, "Compound"] = compound
-            if "TyreLife" in laps.columns:
-                laps.loc[lap_idx, "TyreLife"] = i + 1
-            if "Stint" in laps.columns:
-                laps.loc[lap_idx, "Stint"] = stint_idx
-            lap_idx += 1
-        stint_idx += 1
-    return laps
-
 
 def build_race_template(
     round_df: pd.DataFrame,
@@ -226,6 +160,16 @@ def build_race_template(
     if "PreRaceBaseline" in template.columns:
         baseline = round_df["PreRaceBaseline"].dropna()
         template["PreRaceBaseline"] = baseline.iloc[0] if not baseline.empty else np.nan
+
+    weather_columns = [
+        column for column in ["AirTemp", "TrackTemp", "Humidity", "WindSpeed", "WindDirection"]
+        if column in round_df.columns
+    ]
+    if weather_columns and "LapNumber" in round_df.columns:
+        conditions = round_df.groupby("LapNumber")[weather_columns].median(numeric_only=True)
+        for column in weather_columns:
+            values = template["LapNumber"].map(conditions[column])
+            template[column] = values.interpolate(limit_direction="both")
     return template
 
 
@@ -267,47 +211,12 @@ def sample_pit_loss(stats, rng, mode):
     mean = stats.get("mean")
     std = stats.get("std")
     p10, p90 = stats.get("p10"), stats.get("p90")
-    center = mean if mean is not None else (median if median is not None else 20.0)
+    center = median if median is not None else (mean if mean is not None else 20.0)
     if mode == "fixed":
         return center
     if std is None or std <= 0:
         std = (p90 - p10) / 2.563 if (p10 is not None and p90 is not None and p90 > p10) else 2.0
     return float(np.clip(float(rng.normal(center, std)), 5.0, 60.0))
-
-
-def load_residuals(residuals_path):
-    if not residuals_path.exists():
-        return None
-    df = pd.read_parquet(residuals_path)
-    if "residual" not in df.columns or df.empty:
-        return None
-    df = df[pd.notna(df["residual"])].copy()
-    if df.empty:
-        return None
-    q01, q99 = np.quantile(df["residual"].to_numpy(), [0.01, 0.99])
-    df = df[(df["residual"] >= q01) & (df["residual"] <= q99)]
-    if df.empty:
-        return None
-    global_residuals = df["residual"].to_numpy()
-    by_compound = {}
-    if "Compound" in df.columns:
-        for comp, grp in df.groupby("Compound"):
-            arr = grp["residual"].dropna().to_numpy()
-            if len(arr) >= 50:
-                by_compound[str(comp).upper()] = arr
-    return {"global": global_residuals, "by_compound": by_compound}
-
-
-def sample_residual(compound, residuals, rng):
-    if residuals is None:
-        return 0.0
-    comp = str(compound).upper()
-    arr = residuals.get("by_compound", {}).get(comp)
-    if arr is None or len(arr) == 0:
-        arr = residuals.get("global")
-    if arr is None or len(arr) == 0:
-        return 0.0
-    return float(rng.choice(arr))
 
 
 @st.cache_data(show_spinner=False)
@@ -427,7 +336,7 @@ def simulate_strategies(
             for _ in range(n_sims):
                 lap_preds = np.array(base_preds, dtype=float)
                 if residuals:
-                    lap_preds += np.array([sample_residual(c, residuals, rng) for c in compounds])
+                    lap_preds += sample_residual_series(compounds, residuals, rng)
                 elif noise_sigma and noise_sigma > 0:
                     lap_preds += rng.normal(0.0, noise_sigma, size=lap_preds.shape[0])
                 pit_total = sum(sample_pit_loss(pit_loss_stats, rng, pit_loss_mode) for _ in range(n_stops))
@@ -693,7 +602,7 @@ with tab_simulator:
         "Use Residual Noise",
         value=True,
         key="use_residuals",
-        help="When enabled, the simulator uses residuals from the evaluation set for lap-by-lap noise. When disabled, it falls back to Gaussian noise controlled by Noise Sigma.",
+        help="When enabled, the simulator samples five-lap residual blocks from historical driver/stint sequences. When disabled, it falls back to Gaussian noise controlled by Noise Sigma.",
     )
     residuals = load_residuals_cached(model_name, int(season)) if use_residuals else None
     custom_strategy = st.sidebar.text_input(
@@ -721,9 +630,19 @@ with tab_simulator:
         with st.spinner("Running Monte Carlo simulation..."):
             try:
                 if custom_strategy.strip():
-                    strategies = {"custom": parse_strategy(custom_strategy.strip())}
+                    custom = parse_strategy(custom_strategy.strip())
+                    compounds = available_compounds(round_df, include_wet)
+                    validate_strategy(
+                        custom,
+                        total_laps,
+                        min_stint=min_stint,
+                        max_stint=max_stint,
+                        allowed_compounds=compounds,
+                        require_two_compounds=not allow_single,
+                    )
+                    strategies = {"custom": custom}
                 else:
-                    compounds = available_compounds(race_df, include_wet)
+                    compounds = available_compounds(round_df, include_wet)
                     strategies = generate_strategies(
                         total_laps=int(race_df["LapNumber"].max()),
                         compounds=compounds, max_stops=effective_max_stops,

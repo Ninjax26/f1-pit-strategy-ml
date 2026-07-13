@@ -10,82 +10,14 @@ import matplotlib.pyplot as plt
 
 try:
     from src.sim.support import assess_strategy_support
+    from src.sim.strategies import available_compounds, build_laps, generate_strategies
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from src.sim.support import assess_strategy_support
+    from src.sim.strategies import available_compounds, build_laps, generate_strategies
 
 
 SUPPORT_PENALTY_PER_LAP = 5.0
-
-
-def available_compounds(race_df: pd.DataFrame, include_wet: bool) -> list[str]:
-    compounds = sorted(set(race_df.get("Compound", pd.Series([])).astype(str).str.upper().dropna()))
-    dry = [c for c in compounds if c in {"SOFT", "MEDIUM", "HARD"}]
-    wet = [c for c in compounds if c not in {"SOFT", "MEDIUM", "HARD"}]
-    if include_wet:
-        return dry + wet if dry else wet
-    return dry if dry else compounds
-
-
-def generate_strategies(
-    total_laps: int,
-    compounds: list[str],
-    max_stops: int,
-    min_stint: int,
-    max_stint: int,
-    step: int,
-    require_two_compounds: bool,
-) -> dict[str, list[tuple[str, int]]]:
-    strategies: dict[str, list[tuple[str, int]]] = {}
-
-    if max_stint <= 0:
-        max_stint = total_laps
-
-    if max_stops >= 1:
-        for c1 in compounds:
-            for c2 in compounds:
-                if require_two_compounds and c1 == c2:
-                    continue
-                for s1 in range(min_stint, total_laps - min_stint + 1, step):
-                    s2 = total_laps - s1
-                    if s2 < min_stint or s2 > max_stint:
-                        continue
-                    name = f"1stop_{c1[0]}-{c2[0]}_{s1}-{s2}"
-                    strategies[name] = [(c1, s1), (c2, s2)]
-
-    if max_stops >= 2:
-        for c1 in compounds:
-            for c2 in compounds:
-                for c3 in compounds:
-                    if require_two_compounds and len({c1, c2, c3}) < 2:
-                        continue
-                    for s1 in range(min_stint, total_laps - 2 * min_stint + 1, step):
-                        for s2 in range(min_stint, total_laps - s1 - min_stint + 1, step):
-                            s3 = total_laps - s1 - s2
-                            if s3 < min_stint or s3 > max_stint:
-                                continue
-                            name = f"2stop_{c1[0]}-{c2[0]}-{c3[0]}_{s1}-{s2}-{s3}"
-                            strategies[name] = [(c1, s1), (c2, s2), (c3, s3)]
-
-    return strategies
-
-
-def build_laps(base_laps: pd.DataFrame, strategy: list[tuple[str, int]]) -> pd.DataFrame:
-    laps = base_laps.copy().reset_index(drop=True)
-    lap_idx = 0
-    stint_idx = 1
-    for compound, length in strategy:
-        for i in range(length):
-            if lap_idx >= len(laps):
-                break
-            laps.loc[lap_idx, "Compound"] = compound
-            if "TyreLife" in laps.columns:
-                laps.loc[lap_idx, "TyreLife"] = i + 1
-            if "Stint" in laps.columns:
-                laps.loc[lap_idx, "Stint"] = stint_idx
-            lap_idx += 1
-        stint_idx += 1
-    return laps
 
 
 def load_pit_loss(metrics_path: Path, round_number: int) -> float | None:

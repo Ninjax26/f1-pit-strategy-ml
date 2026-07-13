@@ -159,6 +159,11 @@ def main() -> None:
     parser.add_argument("--raw-dir", type=str, default="data/raw")
     parser.add_argument("--out-dir", type=str, default="data/features")
     parser.add_argument("--exclude-safety-cars", action="store_true")
+    parser.add_argument(
+        "--allow-missing-baseline-history",
+        action="store_true",
+        help="Build a seed historical season with an unavailable pre-race baseline. Such rows cannot be used for model training.",
+    )
     args = parser.parse_args()
 
     raw_dir = Path(args.raw_dir)
@@ -190,8 +195,15 @@ def main() -> None:
 
     df = build_feature_df(df, exclude_safety_cars=args.exclude_safety_cars)
     if len(season_list) == 1:
-        history_df = load_prior_feature_history(out_root, season_list[0])
-        df = apply_pre_race_baseline(df, history_df, season_list[0])
+        try:
+            history_df = load_prior_feature_history(out_root, season_list[0])
+            df = apply_pre_race_baseline(df, history_df, season_list[0])
+        except RuntimeError:
+            if not args.allow_missing_baseline_history:
+                raise
+            df["PreRaceBaseline"] = np.nan
+            df["BaselineSourceSeason"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+            df["LapTimeDelta"] = np.nan
         supported = int(df["PreRaceBaseline"].notna().sum())
         print(f"Pre-race baseline available for {supported:,}/{len(df):,} laps")
     print(f"Total laps after feature engineering: {len(df):,}")

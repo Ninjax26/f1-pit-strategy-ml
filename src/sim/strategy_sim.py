@@ -5,6 +5,15 @@ import joblib
 import numpy as np
 import pandas as pd
 
+try:
+    from src.sim.strategies import available_compounds, build_laps, generate_strategies, parse_strategy, validate_strategy
+    from src.sim.uncertainty import load_residuals, sample_residual_series
+except ModuleNotFoundError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.sim.strategies import available_compounds, build_laps, generate_strategies, parse_strategy, validate_strategy
+    from src.sim.uncertainty import load_residuals, sample_residual_series
+
 
 def _safe_float(value) -> float | None:
     if value is None:
@@ -14,87 +23,6 @@ def _safe_float(value) -> float | None:
     except (TypeError, ValueError):
         return None
     return None if np.isnan(val) else val
-
-
-def parse_strategy(spec: str) -> list[tuple[str, int]]:
-    # Example: "SOFT:18,MEDIUM:22,HARD:20"
-    stints = []
-    for part in spec.split(","):
-        compound, length = part.split(":")
-        stints.append((compound.strip().upper(), int(length)))
-    return stints
-
-
-def available_compounds(race_df: pd.DataFrame, include_wet: bool) -> list[str]:
-    compounds = sorted(set(race_df.get("Compound", pd.Series([])).astype(str).str.upper().dropna()))
-    dry = [c for c in compounds if c in {"SOFT", "MEDIUM", "HARD"}]
-    wet = [c for c in compounds if c not in {"SOFT", "MEDIUM", "HARD"}]
-    if include_wet:
-        return dry + wet if dry else wet
-    return dry if dry else compounds
-
-
-def generate_strategies(
-    total_laps: int,
-    compounds: list[str],
-    max_stops: int,
-    min_stint: int,
-    max_stint: int,
-    step: int,
-    require_two_compounds: bool,
-) -> dict[str, list[tuple[str, int]]]:
-    strategies: dict[str, list[tuple[str, int]]] = {}
-
-    if max_stint <= 0:
-        max_stint = total_laps
-
-    # One-stop (2 stints)
-    if max_stops >= 1:
-        for c1 in compounds:
-            for c2 in compounds:
-                if require_two_compounds and c1 == c2:
-                    continue
-                for s1 in range(min_stint, total_laps - min_stint + 1, step):
-                    s2 = total_laps - s1
-                    if s2 < min_stint or s2 > max_stint:
-                        continue
-                    name = f"1stop_{c1[0]}-{c2[0]}_{s1}-{s2}"
-                    strategies[name] = [(c1, s1), (c2, s2)]
-
-    # Two-stop (3 stints)
-    if max_stops >= 2:
-        for c1 in compounds:
-            for c2 in compounds:
-                for c3 in compounds:
-                    if require_two_compounds and len({c1, c2, c3}) < 2:
-                        continue
-                    for s1 in range(min_stint, total_laps - 2 * min_stint + 1, step):
-                        for s2 in range(min_stint, total_laps - s1 - min_stint + 1, step):
-                            s3 = total_laps - s1 - s2
-                            if s3 < min_stint or s3 > max_stint:
-                                continue
-                            name = f"2stop_{c1[0]}-{c2[0]}-{c3[0]}_{s1}-{s2}-{s3}"
-                            strategies[name] = [(c1, s1), (c2, s2), (c3, s3)]
-
-    return strategies
-
-
-def build_laps(base_laps: pd.DataFrame, strategy: list[tuple[str, int]]) -> pd.DataFrame:
-    laps = base_laps.copy().reset_index(drop=True)
-    lap_idx = 0
-    stint_idx = 1
-    for compound, length in strategy:
-        for i in range(length):
-            if lap_idx >= len(laps):
-                break
-            laps.loc[lap_idx, "Compound"] = compound
-            if "TyreLife" in laps.columns:
-                laps.loc[lap_idx, "TyreLife"] = i + 1
-            if "Stint" in laps.columns:
-                laps.loc[lap_idx, "Stint"] = stint_idx
-            lap_idx += 1
-        stint_idx += 1
-    return laps
 
 
 def _to_seconds(series: pd.Series) -> pd.Series:
@@ -140,9 +68,11 @@ def estimate_pit_loss_from_raw(raw_df: pd.DataFrame) -> float | None:
     if "Driver" in df.columns and "LapNumber" in df.columns:
         for driver, ddf in df.groupby("Driver"):
             ddf = ddf.sort_values("LapNumber")
-            base = clean[clean["Driver"] == driver]["LapTimeSeconds"].median()
-            if np.isnan(base):
+            clean_driver = clean[clean["Driver"] == driver]
+            clean_driver_laps = clean_driver["LapTimeSeconds"].dropna()
+            if clean_driver_laps.empty:
                 continue
+            fallback_base = clean_driver_laps.median()
             pit_in = ddf[ddf["PitInTime"].notna()] if "PitInTime" in ddf.columns else ddf.iloc[0:0]
             if pit_in.empty:
                 continue
@@ -151,6 +81,10 @@ def estimate_pit_loss_from_raw(raw_df: pd.DataFrame) -> float | None:
                 out_lap = ddf[ddf["LapNumber"] == next_lap_number]
                 if out_lap.empty or ("PitOutTime" in out_lap.columns and out_lap["PitOutTime"].isna().all()):
                     continue
+                local = clean_driver[
+                    clean_driver["LapNumber"].between(int(in_lap["LapNumber"]) - 3, next_lap_number + 3)
+                ]["LapTimeSeconds"].dropna()
+                base = local.median() if len(local) >= 3 else fallback_base
                 loss = (in_lap["LapTimeSeconds"] + out_lap.iloc[0]["LapTimeSeconds"]) - 2 * base
                 if pd.notna(loss):
                     losses.append(loss)
@@ -204,7 +138,7 @@ def sample_pit_loss(stats: dict | None, rng: np.random.Generator, mode: str) -> 
     p10 = stats.get("p10")
     p90 = stats.get("p90")
 
-    center = mean if mean is not None else (median if median is not None else 20.0)
+    center = median if median is not None else (mean if mean is not None else 20.0)
     if mode == "fixed":
         return center
 
@@ -216,44 +150,6 @@ def sample_pit_loss(stats: dict | None, rng: np.random.Generator, mode: str) -> 
 
     value = float(rng.normal(center, std))
     return float(np.clip(value, 5.0, 60.0))
-
-
-def load_residuals(residuals_path: Path) -> dict | None:
-    if not residuals_path.exists():
-        return None
-    df = pd.read_parquet(residuals_path)
-    if "residual" not in df.columns:
-        return None
-    df = df[pd.notna(df["residual"])].copy()
-    if df.empty:
-        return None
-
-    q01, q99 = np.quantile(df["residual"].to_numpy(), [0.01, 0.99])
-    df = df[(df["residual"] >= q01) & (df["residual"] <= q99)]
-    if df.empty:
-        return None
-
-    global_residuals = df["residual"].to_numpy()
-    by_compound: dict[str, np.ndarray] = {}
-    if "Compound" in df.columns:
-        for comp, grp in df.groupby("Compound"):
-            arr = grp["residual"].dropna().to_numpy()
-            if len(arr) >= 50:
-                by_compound[str(comp).upper()] = arr
-
-    return {"global": global_residuals, "by_compound": by_compound}
-
-
-def sample_residual(compound: str, residuals: dict | None, rng: np.random.Generator) -> float:
-    if residuals is None:
-        return 0.0
-    comp = str(compound).upper()
-    arr = residuals.get("by_compound", {}).get(comp)
-    if arr is None or len(arr) == 0:
-        arr = residuals.get("global")
-    if arr is None or len(arr) == 0:
-        return 0.0
-    return float(rng.choice(arr))
 
 
 def main() -> None:
@@ -311,7 +207,17 @@ def main() -> None:
             pit_loss_stats = _fixed_pit_loss_stats(20.0)
 
     if args.strategy:
-        strategies = {"custom": parse_strategy(args.strategy)}
+        custom = parse_strategy(args.strategy)
+        compounds = available_compounds(race_df, args.include_wet)
+        validate_strategy(
+            custom,
+            total_laps,
+            min_stint=args.min_stint,
+            max_stint=args.max_stint,
+            allowed_compounds=compounds,
+            require_two_compounds=not args.allow_single_compound,
+        )
+        strategies = {"custom": custom}
     else:
         compounds = available_compounds(race_df, args.include_wet)
         strategies = generate_strategies(
@@ -368,7 +274,7 @@ def main() -> None:
             for _ in range(args.n_sims):
                 lap_preds = np.array(base_preds, dtype=float)
                 if residuals is not None:
-                    noise = np.array([sample_residual(c, residuals, rng) for c in compounds])
+                    noise = sample_residual_series(compounds, residuals, rng)
                     lap_preds = lap_preds + noise
                 elif args.noise_sigma is not None and args.noise_sigma > 0:
                     lap_preds = lap_preds + rng.normal(0.0, args.noise_sigma, size=lap_preds.shape[0])

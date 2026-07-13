@@ -9,10 +9,10 @@
 - Model: hgb
 - Actual total race time (s): 4806.27
 - Predicted total race time (s): 4768.99
-- Pit-loss (auto, median) (s): 19.60
+- Pit-loss (auto, median) (s): 18.70
 
 ## Best Simulated Strategy
-- 2stop_M-H-H_8-18-18 | total predicted time (s): 4801.73
-- Conservative score (s): 4801.73
+- 2stop_M-H-H_8-18-18 | total predicted time (s): 4799.92
+- Conservative score (s): 4799.92
 - Unsupported tyre-life laps: 0
 - Stints: [('MEDIUM', 8), ('HARD', 18), ('HARD', 18)]

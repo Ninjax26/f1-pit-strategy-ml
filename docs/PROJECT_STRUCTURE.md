@@ -20,6 +20,8 @@ f1/
 │   └── sim/
 │       ├── compute_pit_loss.py       # Per-race pit-stop time cost estimation
 │       ├── support.py                # Prior-season counterfactual support profiles
+│       ├── strategies.py             # Shared strategy parsing, validation, and generation
+│       ├── uncertainty.py            # Moving-block residual bootstrap
 │       └── strategy_sim.py           # CLI strategy simulator (Monte Carlo, strategy enumeration)
 │
 ├── data/

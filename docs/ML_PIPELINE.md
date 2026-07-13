@@ -45,8 +45,8 @@ app.py  (Streamlit)
 Monte Carlo Simulation (in app.py)
     │  For each strategy candidate, builds a per-lap feature DataFrame
     │  Runs the trained model to get base lap-time predictions
-    │  For n_sims > 1: samples residual noise per lap (from predictions_{model}.parquet)
-    │                   samples pit loss from per-race Normal distribution
+    │  For n_sims > 1: samples five-lap residual blocks (from predictions_{model}.parquet)
+    │                   samples pit loss around the displayed race median
     │  Aggregates total race time → mean, P10, P50, P90 across simulations
     │  Adds upper-tail uncertainty and historical-support penalties
     ▼
