@@ -113,14 +113,14 @@ Models are trained on **Rounds 1–16** (Bahrain → Italy) and evaluated on **R
 
 | Model | MAE (s) | RMSE (s) |
 |---|---|---|
-| **HGB (HistGradientBoosting)** | **1.41** | **2.25** |
+| **HGB (HistGradientBoosting)** | **1.49** | **2.30** |
 | Ridge Regression | 3.74 | 4.91 |
 
 _MAE and RMSE measure error relative to the true absolute lap time._
 
 ### Latest Evaluation Artifacts
 
-- `data/metrics/metrics.json` stores the current split-wide metrics
+- `data/metrics/metrics.json` and `data/metrics/metrics_2024.json` store the latest split-wide metrics used by the app
 - `data/metrics/feature_importance_hgb.csv` stores permutation feature importance for HGB
 - `data/metrics/rolling_metrics_hgb.json` and `data/metrics/rolling_metrics_ridge.json` store rolling validation results
 - `data/metrics/predictions_hgb.parquet` and `data/metrics/predictions_ridge.parquet` store per-lap predictions and residuals used by Monte Carlo noise sampling

@@ -77,6 +77,18 @@ def group_metrics(df_pred: pd.DataFrame, group_col: str) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("mae")
 
 
+def write_aggregate_metrics(metrics_dir: Path, season: int, results: dict, train_rounds: list[int], test_rounds: list[int]) -> None:
+    """Write the metric schema consumed by the Streamlit dashboard."""
+    aggregate = {
+        **results,
+        "train_rounds": train_rounds,
+        "test_rounds": test_rounds,
+    }
+    for path in (metrics_dir / "metrics.json", metrics_dir / f"metrics_{season}.json"):
+        with open(path, "w") as f:
+            json.dump(aggregate, f, indent=2)
+
+
 def rolling_splits(rounds: list[int], train_min: int, test_window: int, step: int):
     max_round = max(rounds)
     splits = []
@@ -148,6 +160,7 @@ def main() -> None:
     train_df = df[df["RoundNumber"].isin(train_rounds)].copy()
     test_df = df[df["RoundNumber"].isin(test_rounds)].copy()
 
+    overall_results = {}
     for model_name in model_names:
         model_path = Path(args.models_dir) / f"{model_name}_model.joblib"
         model = joblib.load(model_path)
@@ -164,6 +177,8 @@ def main() -> None:
             df_pred["pred"] = preds
             df_pred["residual"] = df_pred["pred"] - df_pred[target]
             overall = metrics_for_split(df_pred[target], df_pred["pred"])
+
+        overall_results[model_name] = overall
             
         if model_name == "hgb":
             print(f"Computing permutation feature importance for {model_name}...")
@@ -190,6 +205,8 @@ def main() -> None:
             group_results["stint"].to_csv(metrics_dir / f"mae_by_stint_{model_name}.csv", index=False)
         group_results["round"].to_csv(metrics_dir / f"mae_by_round_{model_name}.csv", index=False)
         print(json.dumps({"model": model_name, "overall": overall}, indent=2))
+
+    write_aggregate_metrics(metrics_dir, args.season, overall_results, train_rounds, test_rounds)
 
 
 if __name__ == "__main__":

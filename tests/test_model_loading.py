@@ -90,6 +90,17 @@ class TestMetricsData:
         assert "mae" in metrics[name]
         assert "rmse" in metrics[name]
 
+        with open(METRICS_DIR / f"metrics_{name}.json") as f:
+            model_metrics = json.load(f)["overall"]
+        assert metrics[name] == model_metrics
+
+    def test_season_metrics_match_default_metrics(self):
+        with open(METRICS_DIR / "metrics.json") as f:
+            default_metrics = json.load(f)
+        with open(METRICS_DIR / "metrics_2024.json") as f:
+            season_metrics = json.load(f)
+        assert season_metrics == default_metrics
+
     @pytest.mark.parametrize("name", ["hgb", "ridge"])
     def test_rolling_metrics(self, name):
         path = METRICS_DIR / f"rolling_metrics_{name}.json"

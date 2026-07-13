@@ -345,7 +345,17 @@ def load_model_metrics(season):
     ):
         if path.exists():
             with open(path) as f:
-                return json.load(f)
+                payload = json.load(f)
+            model_metrics = {}
+            for model_name in ("hgb", "ridge"):
+                metrics = payload.get(model_name)
+                if not isinstance(metrics, dict):
+                    continue
+                if isinstance(metrics.get("overall"), dict):
+                    metrics = metrics["overall"]
+                if metrics.get("mae") is not None and metrics.get("rmse") is not None:
+                    model_metrics[model_name] = metrics
+            return model_metrics or None
     return None
 
 
