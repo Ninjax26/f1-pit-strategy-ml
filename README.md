@@ -1,24 +1,22 @@
-# 🏎️ F1 Race Strategy Decision Support System
+# F1 pit-strategy decision support
 
-> **Lap-time prediction + Monte Carlo strategy optimization for Formula 1 — built on real 2021-2025 race data.**
+**Compare pit windows and tyre plans with lap-time predictions and uncertainty, not a single magic answer.**
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-orange?logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+This Streamlit project combines historical Formula 1 lap data, two scikit-learn models, and Monte Carlo simulation. It estimates how alternative strategies might play out under the model's assumptions. It is a research and exploration tool, not a live race-strategy system.
 
-This project is an interactive decision-support application that helps evaluate Formula 1 pit-stop strategies using historical race telemetry, machine learning, and Monte Carlo simulation. Users can compare multiple strategies, estimate total race time, and analyze uncertainty through an interactive Streamlit dashboard.
+[Try the app](https://f1-predictor-temp.streamlit.app/) · [Run locally](#quick-start) · [Read the evaluation](#results)
 
-Live app: [https://f1-predictor-temp.streamlit.app/](https://f1-predictor-temp.streamlit.app/)
+| Data | Model | Decision view |
+| :--- | :--- | :--- |
+| FastF1 race laps and engineered stint, compound, and weather features. | Ridge baseline and HistGradientBoosting lap-time model. | Compare strategy-time distributions and inspect model diagnostics. |
 
 ---
 
-## 📸 Screenshots
+## At a glance
 
-![Dashboard](docs/assets/dashboard.png)
-![Simulator](docs/assets/simulator.png)
-![Model Performance](docs/assets/model_performance.png)
-![Feature Importance](docs/assets/feature_importance.png)
+![Belgian Grand Prix case-study strategy comparison](figures/case_study_max_round14.png)
+
+The figure above is a generated case study, not a screenshot of the interactive app. The [live Streamlit app](https://f1-predictor-temp.streamlit.app/) contains the dashboard, simulator, and model-performance views.
 
 ---
 
@@ -89,7 +87,7 @@ For detailed project structure and advanced usage, see the [Project Structure Do
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-username>/f1-pit-strategy-ml.git
+git clone https://github.com/Ninjax26/f1-pit-strategy-ml.git
 cd f1-pit-strategy-ml
 
 # 2. Create and activate a virtual environment
@@ -99,7 +97,7 @@ source .venv/bin/activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Launch the app (pre-built data included)
+# 4. Launch the app (pre-built data and models included)
 streamlit run app.py
 ```
 
